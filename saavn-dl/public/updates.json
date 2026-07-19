@@ -1,0 +1,38 @@
+[ 
+  {
+    "id": 6,
+    "title": "Metadata Editor!",
+    "date": "15-07-2026",
+    "content": "JioSaavn metadata are often incorrect, That's why saavn-dl now has a built-in metadata editor! You can now edit song metadata (title, artist, album, year, genre) before downloading the song. This feature allows you to customize the metadata of your downloaded songs according to your preferences. If you encounter any issues or have suggestions for improvement, please let me know on GitHub/Discord. Enjoy the new metadata editor feature!"
+  },
+  {
+    "id": 5,
+    "title": "Support the Project!",
+    "date": "08-07-2026",
+    "content": "saavn-dl will always remain free for everyone. If you'd like to support the project, you can now do so via UPI. Every contribution helps cover hosting costs and ongoing development, making it possible to keep the service free and continue adding new features. International support through Ko-fi is coming soon. Again thank you to everyone who uses, tests, and shares saavn-dl — your support means a lot!"
+  },
+  {
+    "id": 4,
+    "title": "Added Album Download Support!",
+    "date": "15-06-2026",
+    "content": "saavn-dl now supports full album downloads! You can now search albums or fetch JioSaavn album links and browse complete tracklist directly in saavn-dl. Also you can download individual tracks from an album or download entire album in zip format or as individual files. If you encounter any issues or have suggestions for improvement, please let me know on GitHub/Discord. Enjoy the new album download feature!"
+  },
+  {
+    "id": 3,
+    "title": "Search Feature Is Here!",
+    "date": "30-05-2026",
+    "content": "Finally, The search feature is here! You can now search songs directly in saavn-dl! Simply type the song name in the search bar and hit enter. No more need to copy links from jiosaavn.com. You can still paste links if you are unable to find the song in search results. Note: Search results are fetched from jiosaavn.com, so if a song is not available on jiosaavn.com, it won't appear in search results here. If you face any issues, please let me know on GitHub/Discord. Enjoy the new feature!"
+  },
+  {
+    "id": 2,
+    "title": "Search Feature Coming Soon!",
+    "date": "26-05-2026",
+    "content": "I know that many users outside India are facing issues when trying to get access to jiosaavn.com because JioSaavn is only available in India. I'm gonna implement search feature here within next few days so you can just search songs here. No more need to copy links from jiosaavn.com. Stay tuned! Quick solution for now: Use VPN and set location to India, then you can access jiosaavn.com and copy links from there."
+    },
+    {
+    "id": 1,
+    "title": "FFMpeg Update",
+    "date": "25-05-2026",
+    "content": "FFMpeg issue fixed! Metadata loading and embedding should now work without any issues. But if you encounter any problems, please let me know on GitHub/Discord."
+  }
+]

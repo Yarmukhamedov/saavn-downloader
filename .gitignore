@@ -1,0 +1,23 @@
+# Dependency directories
+**/node_modules/
+node_modules/
+
+# Production/build output
+**/dist/
+**/build/
+**/out/
+dist/
+
+# Local env files (security)
+**/.env.local
+**/.env.production
+**/.env.*.local
+.env
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Wrangler/Cloudflare local files
+**/.wrangler/
+.wrangler/

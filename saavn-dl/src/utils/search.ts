@@ -1,0 +1,27 @@
+import type { SearchResult } from '../types/saavn';
+
+const SEARCH_API = import.meta.env.VITE_SEARCH_API 
+  ? `${import.meta.env.VITE_SEARCH_API}/api/songs?q=`
+  : 'https://rtmx.vercel.app/api/songs?q=';
+  // Defalut API (rtmx.vercel.app). Replace with your jiosaavn-api instance.
+  // Visit https://github.com/ODSkyler/jiosaavn-api for more information.
+
+interface SearchApiResponse {
+  results: SearchResult[];
+}
+
+export async function searchSongs(query: string): Promise<SearchResult[]> {
+  const resp = await fetch(
+    `${SEARCH_API}${encodeURIComponent(query)}`
+  );
+
+  if (!resp.ok) {
+    throw new Error(`Search failed (${resp.status})`);
+  }
+
+  const data: SearchApiResponse = await resp.json();
+
+  return Array.isArray(data.results)
+    ? data.results
+    : [];
+}
