@@ -1,22 +1,21 @@
-# JioSaavn Music Downloader (Monorepo)
-
+# JioSaavn Music Downloader
 Ushbu repozitoriyada JioSaavn musiqalarini yuklab beradigan loyihaning barcha komponentlari jamlangan. 
 
 > [!NOTE]
-> Bu loyiha original loyihalarning shaxsiy ehtiyojlar uchun moslashtirilgan variantidir.
+> Bu loyiha boshqa bir original loyihalarning shaxsiy ehtiyojim uchun o'zimga moslashtirilgan variantidir.
 
 ## Loyiha Strukturasi
 
 Loyiha quyidagi papkalardan tashkil topgan:
 
 *   📂 **[saavn-dl](file:///Users/sss/Documents/Developer/Vibecoding/Music%20Downloader/saavn-dl)**: React, Vite va TypeScript yordamida yozilgan foydalanuvchi interfeysi (Frontend).
-*   📂 **[jiosaavn-api](file:///Users/sss/Documents/Developer/Vibecoding/Music%20Downloader/jiosaavn-api)**: JioSaavn musiqalarini qidirish uchun API xizmati (Vercel-ga joylanadi).
+*   📂 **[jiosaavn-api](file:///Users/sss/Documents/Developer/Vibecoding/Music%20Downloader/jiosaavn-api)**: JioSaavn musiqalarini qidirish uchun API xizmati.
 *   📂 **[saavn-dl-api](file:///Users/sss/Documents/Developer/Vibecoding/Music%20Downloader/saavn-dl-api)**: Musiqa metadatalarini yuklash va uning ichiga album art tikib berish uchun proksi Cloudflare Worker.
 *   📂 **[local-backend](file:///Users/sss/Documents/Developer/Vibecoding/Music%20Downloader/local-backend)**: Lokal muhitda barcha API'larni yagona portda (`3000`) ishga tushirish uchun yozilgan Express server.
 
 ---
 
-## Lokal ishga tushirish
+## Local ishga tushirish
 
 Lokal rivojlantirish va tekshirish uchun:
 
