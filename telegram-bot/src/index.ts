@@ -7,17 +7,30 @@ dotenv.config();
 
 const BOT_TOKEN = process.env.BOT_TOKEN || '8922942398:AAFsRjiocyDI7sCXDsfszkJvvzUrCzygeO4';
 const SEARCH_API = process.env.SEARCH_API || 'https://jiosaavn-api-eight-sigma.vercel.app/api/songs?q=';
+const BASE_API = SEARCH_API.replace('/songs?q=', ''); // typically https://jiosaavn-api-eight-sigma.vercel.app/api
 const SONG_API = process.env.SONG_API || 'https://sda.ymkhdv.workers.dev/song';
 
 const bot = new Bot(BOT_TOKEN);
 
-// ── Song cache (solves Telegram's 64-byte callback_data limit) ────────────────
+// ── Caches (solves Telegram's 64-byte callback_data limit) ────────────────────
 const songCache = new Map<string, string>(); // cacheId -> perma_url
-let cacheSeq = 0;
+let songSeq = 0;
 
 function cacheSong(permaUrl: string): string {
-  const id = String(cacheSeq++ % 9999).padStart(4, '0');
+  const id = String(songSeq++ % 9999).padStart(4, '0');
   songCache.set(id, permaUrl);
+  return id;
+}
+
+const searchCache = new Map<string, string>(); // searchId -> query string
+let searchSeq = 0;
+
+function cacheSearch(query: string): string {
+  for (const [k, v] of searchCache.entries()) {
+    if (v === query) return k;
+  }
+  const id = String(searchSeq++ % 9999).padStart(4, '0');
+  searchCache.set(id, query);
   return id;
 }
 
@@ -58,6 +71,106 @@ function formatDuration(secStr: string | number): string {
   return `${m}:${sec < 10 ? '0' : ''}${sec}`;
 }
 
+type SearchType = 'song' | 'album' | 'artist';
+
+async function renderSearch(
+  ctx: any,
+  query: string,
+  type: SearchType,
+  page: number,
+  quality: Quality,
+  messageId?: number
+) {
+  const url = `${BASE_API}/${type}s?q=${encodeURIComponent(query)}&page=${page}`;
+  
+  try {
+    const resp = await axios.get(url);
+    const results = resp.data?.results || [];
+
+    if (!Array.isArray(results) || results.length === 0) {
+      const emptyMsg = `❌ "*${escapeMd(query)}*" bo'yicha hech narsa topilmadi\\.`;
+      if (messageId) {
+        await ctx.api.editMessageText(ctx.chat.id, messageId, emptyMsg, { parse_mode: 'MarkdownV2' });
+      } else {
+        await ctx.reply(emptyMsg, { parse_mode: 'MarkdownV2' });
+      }
+      return;
+    }
+
+    const keyboard = new InlineKeyboard();
+    let msgText = `🔍 "*${escapeMd(query)}*" bo'yicha natijalar \\(${type === 'song' ? 'Qo\'shiq' : type === 'album' ? 'Albom' : 'Xonanda'}, ${page}\\-sahifa\\):\n\n`;
+
+    const searchId = cacheSearch(query);
+    const limit = 8;
+    const topResults = results.slice(0, limit);
+
+    if (type === 'song') {
+      topResults.forEach((song: any, index: number) => {
+        const title = song.title || 'Track';
+        const artist = song.more_info?.artists?.primary?.map((a: any) => a.name).join(', ') || song.subtitle || '';
+        const dur = formatDuration(song.more_info?.duration || song.duration);
+        msgText += `${index + 1}\\. *${escapeMd(title)}*\n   👤 ${escapeMd(artist)} \\(${dur}\\)\n\n`;
+        const cacheId = cacheSong(song.perma_url || song.track_url);
+        const btnText = artist ? `${artist} - ${title}` : title;
+        keyboard.text(`🎵 ${index + 1}. ${btnText.slice(0, 45)}`, `dl_${cacheId}`).row();
+      });
+    } else if (type === 'album') {
+      topResults.forEach((album: any, index: number) => {
+        const title = album.title || 'Album';
+        const subtitle = album.subtitle || '';
+        msgText += `${index + 1}\\. *${escapeMd(title)}*\n   💿 ${escapeMd(subtitle)}\n\n`;
+        const btnText = subtitle ? `${title} - ${subtitle}` : title;
+        keyboard.text(`💿 ${index + 1}. ${btnText.slice(0, 45)}`, `al_${album.token}`).row();
+      });
+    } else if (type === 'artist') {
+      topResults.forEach((artist: any, index: number) => {
+        const name = artist.name || 'Artist';
+        msgText += `${index + 1}\\. *${escapeMd(name)}*\n\n`;
+        keyboard.text(`👤 ${index + 1}. ${name.slice(0, 45)}`, `ar_${artist.token}`).row();
+      });
+    }
+
+    const total = resp.data?.total || 0;
+    const hasNext = page * 10 < total; // Usually JioSaavn returns 10 items per page
+    
+    // Row 1: Pagination
+    if (page > 1) {
+      keyboard.text('⬅️ Orqaga', `sp_${searchId}_${type}_${page - 1}`);
+    }
+    keyboard.text('❌ Yopish', 'close_msg');
+    if (hasNext || results.length > limit) {
+      keyboard.text('Oldinga ➡️', `sp_${searchId}_${type}_${page + 1}`);
+    }
+    keyboard.row();
+
+    // Row 2: Filters
+    if (type !== 'song') keyboard.text('🎵 Qo\'shiqlar', `sp_${searchId}_song_1`);
+    if (type !== 'album') keyboard.text('💿 Albomlar', `sp_${searchId}_album_1`);
+    if (type !== 'artist') keyboard.text('👤 Xonandalar', `sp_${searchId}_artist_1`);
+    keyboard.row();
+
+    if (messageId) {
+      await ctx.api.editMessageText(ctx.chat.id, messageId, msgText, {
+        parse_mode: 'MarkdownV2',
+        reply_markup: keyboard,
+      });
+    } else {
+      await ctx.reply(msgText, {
+        parse_mode: 'MarkdownV2',
+        reply_markup: keyboard,
+      });
+    }
+  } catch (err) {
+    console.error('Search rendering error:', err);
+    const errMsg = '❌ *Qidiruvda xatolik yuz berdi\\. Keyinroq qaytadan urinib ko\'ring\\.*';
+    if (messageId) {
+      await ctx.api.editMessageText(ctx.chat.id, messageId, errMsg, { parse_mode: 'MarkdownV2' });
+    } else {
+      await ctx.reply(errMsg, { parse_mode: 'MarkdownV2' });
+    }
+  }
+}
+
 // ── /start ────────────────────────────────────────────────────────────────────
 bot.command('start', async (ctx) => {
   const welcomeText =
@@ -89,6 +202,31 @@ bot.on('callback_query:data', async (ctx) => {
   const data = ctx.callbackQuery.data;
   const userId = ctx.from?.id ?? 0;
 
+  // ── Close Message ────────────────────────────────────────────────────────
+  if (data === 'close_msg') {
+    await ctx.deleteMessage().catch(() => {});
+    return;
+  }
+
+  // ── Search Pagination & Filter ───────────────────────────────────────────
+  if (data.startsWith('sp_')) {
+    const parts = data.split('_');
+    const searchId = parts[1];
+    const type = parts[2] as SearchType;
+    const page = parseInt(parts[3], 10);
+    
+    const query = searchCache.get(searchId);
+    if (!query) {
+      await ctx.answerCallbackQuery({ text: '⚠️ Qidiruv eskirgan. Qayta qidiring.' });
+      return;
+    }
+    
+    const quality = getUserQuality(userId);
+    await renderSearch(ctx, query, type, page, quality, ctx.callbackQuery.message?.message_id);
+    await ctx.answerCallbackQuery();
+    return;
+  }
+
   // ── Quality selection ────────────────────────────────────────────────────
   if (data.startsWith('setq_')) {
     const selected = data.replace('setq_', '') as Quality;
@@ -105,6 +243,74 @@ bot.on('callback_query:data', async (ctx) => {
       { parse_mode: 'MarkdownV2', reply_markup: buildQualityKeyboard(selected) }
     );
     await ctx.answerCallbackQuery({ text: `✅ ${selected} kbps tanlandi!` });
+    return;
+  }
+
+  // ── Album Fetch ──────────────────────────────────────────────────────────
+  if (data.startsWith('al_')) {
+    const token = data.replace('al_', '');
+    await ctx.answerCallbackQuery({ text: '⏳ Albom yuklanmoqda...' });
+    
+    try {
+      const resp = await axios.get(`${BASE_API}/album?token=${token}`);
+      const album = resp.data;
+      if (!album || !album.songs || album.songs.length === 0) {
+        await ctx.answerCallbackQuery({ text: '⚠️ Albom bo\'sh yoki topilmadi.' });
+        return;
+      }
+      
+      const keyboard = new InlineKeyboard();
+      let msgText = `💿 *${escapeMd(album.title)}*\n👤 ${escapeMd(album.subtitle || album.header_desc)}\n\n*Qo'shiqlar:*\n\n`;
+      
+      album.songs.forEach((song: any, index: number) => {
+        const title = song.title || 'Track';
+        const dur = formatDuration(song.more_info?.duration || song.duration);
+        msgText += `${index + 1}\\. *${escapeMd(title)}* \\(${dur}\\)\n`;
+        const cacheId = cacheSong(song.perma_url || song.track_url);
+        keyboard.text(`🎵 ${index + 1}. ${title.slice(0, 45)}`, `dl_${cacheId}`).row();
+      });
+      
+      keyboard.text('❌ Yopish', 'close_msg');
+      
+      await ctx.reply(msgText, { parse_mode: 'MarkdownV2', reply_markup: keyboard });
+    } catch (err) {
+      console.error('Album fetch error:', err);
+      await ctx.reply('❌ *Albomni yuklab bo\'lmadi\\.*', { parse_mode: 'MarkdownV2' });
+    }
+    return;
+  }
+
+  // ── Artist Fetch ─────────────────────────────────────────────────────────
+  if (data.startsWith('ar_')) {
+    const token = data.replace('ar_', '');
+    await ctx.answerCallbackQuery({ text: '⏳ Xonanda ma\'lumotlari yuklanmoqda...' });
+    
+    try {
+      const resp = await axios.get(`${BASE_API}/artist?token=${token}`);
+      const artist = resp.data;
+      if (!artist || !artist.topSongs || artist.topSongs.length === 0) {
+        await ctx.answerCallbackQuery({ text: '⚠️ Qo\'shiqlar topilmadi.' });
+        return;
+      }
+      
+      const keyboard = new InlineKeyboard();
+      let msgText = `👤 *${escapeMd(artist.name)}*\n🔥 *Mashhur qo'shiqlari:*\n\n`;
+      
+      artist.topSongs.forEach((song: any, index: number) => {
+        const title = song.title || 'Track';
+        const dur = formatDuration(song.duration || song.more_info?.duration);
+        msgText += `${index + 1}\\. *${escapeMd(title)}* \\(${dur}\\)\n`;
+        const cacheId = cacheSong(song.perma_url || song.track_url);
+        keyboard.text(`🎵 ${index + 1}. ${title.slice(0, 45)}`, `dl_${cacheId}`).row();
+      });
+      
+      keyboard.text('❌ Yopish', 'close_msg');
+      
+      await ctx.reply(msgText, { parse_mode: 'MarkdownV2', reply_markup: keyboard });
+    } catch (err) {
+      console.error('Artist fetch error:', err);
+      await ctx.reply('❌ *Xonanda ma\'lumotlarini yuklab bo\'lmadi\\.*', { parse_mode: 'MarkdownV2' });
+    }
     return;
   }
 
@@ -246,61 +452,13 @@ bot.on('message:text', async (ctx) => {
   const statusMsg = await ctx.reply('🔍 *Qidirilmoqda…*', { parse_mode: 'MarkdownV2' });
   const userId = ctx.from?.id ?? 0;
   const quality = getUserQuality(userId);
-
-  try {
-    const resp = await axios.get(`${SEARCH_API}${encodeURIComponent(text)}`);
-    const results = resp.data?.results || [];
-
-    if (!Array.isArray(results) || results.length === 0) {
-      await ctx.api.editMessageText(
-        ctx.chat.id,
-        statusMsg.message_id,
-        `❌ "*${escapeMd(text)}*" bo'yicha hech narsa topilmadi\\.`,
-        { parse_mode: 'MarkdownV2' }
-      );
-      return;
-    }
-
-    const topResults = results.slice(0, 8);
-    const keyboard = new InlineKeyboard();
-    let msgText =
-      `🔍 "*${escapeMd(text)}*" bo'yicha natijalar \\(${quality} kbps\\):\n\n`;
-
-    topResults.forEach((song: any, index: number) => {
-      const title = song.title || 'Track';
-      const artist =
-        song.more_info?.artists?.primary?.map((a: any) => a.name).join(', ') ||
-        song.subtitle ||
-        '';
-      const dur = formatDuration(song.more_info?.duration);
-
-      msgText += `${index + 1}\\. *${escapeMd(title)}*\n   👤 ${escapeMd(artist)} \\(${dur}\\)\n\n`;
-
-      const cacheId = cacheSong(song.perma_url);
-      const btnText = artist ? `${artist} - ${title}` : title;
-      keyboard.text(`🎵 ${index + 1}. ${btnText.slice(0, 45)}`, `dl_${cacheId}`).row();
-    });
-
-    await ctx.api.editMessageText(ctx.chat.id, statusMsg.message_id, msgText, {
-      parse_mode: 'MarkdownV2',
-      reply_markup: keyboard,
-    });
-  } catch (err) {
-    console.error('Search error:', err);
-    await ctx.api.editMessageText(
-      ctx.chat.id,
-      statusMsg.message_id,
-      '❌ *Qidiruvda xatolik yuz berdi\\. Keyinroq qaytadan urinib ko\'ring\\.*',
-      { parse_mode: 'MarkdownV2' }
-    );
-  }
+  await renderSearch(ctx, text, 'song', 1, quality, statusMsg.message_id);
 });
 
 // ── Global error handler (prevents crash loops) ───────────────────────────────
 bot.catch((err) => {
   const ctx = err.ctx;
   console.error(`Error while handling update ${ctx.update.update_id}:`, err.error);
-  // Silently swallow errors so PM2 doesn't restart the process unnecessarily
 });
 
 // ── Launch ────────────────────────────────────────────────────────────────────
