@@ -353,12 +353,12 @@ bot.on('callback_query:data', async (ctx) => {
       }
       
       const keyboard = new InlineKeyboard();
-      let msgText = `👤 *${escapeMd(artist.name)}*\n🔥 *TOP 10 qo'shiqlari:*\n\n`;
+      let msgText = `👤 *${escapeMd(artist.name)}*\n\n*Top 10:*\n`;
       
       artist.topSongs.slice(0, 10).forEach((song: any, index: number) => {
         const title = song.title || 'Track';
         const dur = formatDuration(song.duration || song.more_info?.duration);
-        msgText += `${index + 1}\\. *${escapeMd(title)}* \\(${dur}\\)\n`;
+        msgText += `${index + 1}\\. ${escapeMd(title)} \\(${dur}\\)\n`;
         const cacheId = cacheSong(song.perma_url || song.track_url);
         keyboard.text(`🎵 ${index + 1}. ${title.slice(0, 45)}`, `dl_${cacheId}`).row();
       });
