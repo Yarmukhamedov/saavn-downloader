@@ -316,7 +316,37 @@ bot.on('callback_query:data', async (ctx) => {
   // ── Artist Fetch ─────────────────────────────────────────────────────────
   if (data.startsWith('ar_')) {
     const token = data.replace('ar_', '');
-    const statusMsg = await ctx.reply('⏳ *Xonanda ma\'lumotlari yuklanmoqda…*', { parse_mode: 'MarkdownV2' });
+    const statusMsg = await ctx.reply(`⏳ *Xonanda ma'lumotlari yuklanmoqda…*`, { parse_mode: 'MarkdownV2' });
+    await ctx.answerCallbackQuery().catch(() => {});
+    
+    try {
+      const resp = await axios.get(`${BASE_API}/artist?token=${token}`);
+      const artist = resp.data;
+      if (!artist || !artist.name) {
+        await ctx.api.editMessageText(ctx.chat!.id, statusMsg.message_id, `⚠️ *Xonanda ma'lumotlari topilmadi\\.*`, { parse_mode: 'MarkdownV2' });
+        return;
+      }
+      
+      const keyboard = new InlineKeyboard();
+      const msgText = `👤 *${escapeMd(artist.name)}*\n\nMa'lumotlarni tanlang:`;
+      
+      keyboard.text('🔥 TOP 10', `artop_${token}`).row();
+      const searchId = cacheSearch(artist.name || 'Unknown');
+      keyboard.text('💿 Albomlar', `sp_${searchId}_album_1`).row();
+      keyboard.text('❌ Yopish', 'close_msg');
+      
+      await ctx.api.editMessageText(ctx.chat!.id, statusMsg.message_id, msgText, { parse_mode: 'MarkdownV2', reply_markup: keyboard });
+    } catch (err) {
+      console.error('Artist fetch error:', err);
+      await ctx.api.editMessageText(ctx.chat!.id, statusMsg.message_id, `❌ *Xonanda ma'lumotlarini yuklab bo'lmadi\\.*`, { parse_mode: 'MarkdownV2' });
+    }
+    return;
+  }
+
+  // ── Artist TOP 10 Fetch ──────────────────────────────────────────────────
+  if (data.startsWith('artop_')) {
+    const token = data.replace('artop_', '');
+    const statusMsg = await ctx.reply(`⏳ *Top 10 qo'shiqlar yuklanmoqda…*`, { parse_mode: 'MarkdownV2' });
     await ctx.answerCallbackQuery().catch(() => {});
     
     try {
@@ -328,7 +358,7 @@ bot.on('callback_query:data', async (ctx) => {
       }
       
       const keyboard = new InlineKeyboard();
-      let msgText = `👤 *${escapeMd(artist.name)}*\n🔥 *Mashhur qo'shiqlari:*\n\n`;
+      let msgText = `👤 *${escapeMd(artist.name)}*\n🔥 *TOP 10 qo'shiqlari:*\n\n`;
       
       artist.topSongs.forEach((song: any, index: number) => {
         const title = song.title || 'Track';
@@ -344,8 +374,8 @@ bot.on('callback_query:data', async (ctx) => {
       
       await ctx.api.editMessageText(ctx.chat!.id, statusMsg.message_id, msgText, { parse_mode: 'MarkdownV2', reply_markup: keyboard });
     } catch (err) {
-      console.error('Artist fetch error:', err);
-      await ctx.api.editMessageText(ctx.chat!.id, statusMsg.message_id, '❌ *Xonanda ma\'lumotlarini yuklab bo\'lmadi\\.*', { parse_mode: 'MarkdownV2' });
+      console.error('Artist Top 10 fetch error:', err);
+      await ctx.api.editMessageText(ctx.chat!.id, statusMsg.message_id, `❌ *Qo'shiqlarni yuklab bo'lmadi\\.*`, { parse_mode: 'MarkdownV2' });
     }
     return;
   }
