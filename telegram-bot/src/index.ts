@@ -277,7 +277,8 @@ bot.on('message:text', async (ctx) => {
       msgText += `${index + 1}\\. *${escapeMd(title)}*\n   👤 ${escapeMd(artist)} \\(${dur}\\)\n\n`;
 
       const cacheId = cacheSong(song.perma_url);
-      keyboard.text(`🎵 ${index + 1}. ${title.slice(0, 25)}`, `dl_${cacheId}`).row();
+      const btnText = artist ? `${artist} - ${title}` : title;
+      keyboard.text(`🎵 ${index + 1}. ${btnText.slice(0, 45)}`, `dl_${cacheId}`).row();
     });
 
     await ctx.api.editMessageText(ctx.chat.id, statusMsg.message_id, msgText, {
