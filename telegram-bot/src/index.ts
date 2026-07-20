@@ -288,12 +288,12 @@ bot.on('callback_query:data', async (ctx) => {
       }
       
       const keyboard = new InlineKeyboard();
-      let msgText = `💿 *${escapeMd(album.title)}*\n👤 ${escapeMd(album.subtitle || album.header_desc)}\n\n*Qo'shiqlar:*\n\n`;
+      let msgText = `💿 *${escapeMd(album.title)}*\n👤 ${escapeMd(album.subtitle || album.header_desc)}\n\n*Tracklist:*\n`;
       
       album.songs.forEach((song: any, index: number) => {
         const title = song.title || 'Track';
         const dur = formatDuration(song.more_info?.duration || song.duration);
-        msgText += `${index + 1}\\. *${escapeMd(title)}* \\(${dur}\\)\n`;
+        msgText += `${index + 1}\\. ${escapeMd(title)} \\(${dur}\\)\n`;
         const cacheId = cacheSong(song.perma_url || song.track_url);
         keyboard.text(`🎵 ${index + 1}. ${title.slice(0, 45)}`, `dl_${cacheId}`).row();
       });
