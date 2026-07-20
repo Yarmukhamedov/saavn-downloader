@@ -11,6 +11,20 @@ const SONG_API = process.env.SONG_API || 'https://sda.ymkhdv.workers.dev/song';
 
 const bot = new Bot(BOT_TOKEN);
 
+// ── Song cache (solves Telegram's 64-byte callback_data limit) ────────────────
+// Instead of storing the full URL in callback_data, we store a short numeric ID
+// and look up the full URL from this map.
+const songCache = new Map<string, string>(); // cacheId -> perma_url
+let cacheSeq = 0;
+
+function cacheSong(permaUrl: string): string {
+  const id = String(cacheSeq++ % 9999).padStart(4, '0');
+  songCache.set(id, permaUrl);
+  return id; // e.g. "0042" → callback_data: "dl_0042" (7 bytes, well under 64)
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
 // Escape MarkdownV2 special characters
 function escapeMd(text: string = ''): string {
   return text.replace(/[_*[\]()~`>#+\-=|{}.!]/g, '\\$&');
@@ -26,7 +40,7 @@ function formatDuration(secStr: string | number): string {
 
 // ── Start Command ─────────────────────────────────────────────────────────────
 bot.command('start', async (ctx) => {
-  const welcomeText = 
+  const welcomeText =
     `🎧 *JioSaavn Music Downloader Bot*\\!\n\n` +
     `Menga qo'shiq nomini yozing yoki JioSaavn havolasini yuboring\\.\n\n` +
     `*Misollar:*\n` +
@@ -42,7 +56,13 @@ bot.on('callback_query:data', async (ctx) => {
   const data = ctx.callbackQuery.data;
 
   if (data.startsWith('dl_')) {
-    const permaUrl = decodeURIComponent(data.replace('dl_', ''));
+    const cacheId = data.replace('dl_', '');
+    const permaUrl = songCache.get(cacheId);
+
+    if (!permaUrl) {
+      await ctx.answerCallbackQuery({ text: '⚠️ Musiqa eskirgan. Qayta qidiring.' });
+      return;
+    }
 
     await ctx.answerCallbackQuery({ text: 'Musiqa yuklanmoqda...' });
     const statusMsg = await ctx.reply('⏳ *Musiqa tayyorlanmoqda, kuting...*', { parse_mode: 'MarkdownV2' });
@@ -65,35 +85,37 @@ bot.on('callback_query:data', async (ctx) => {
       const audioUrl = getQualityUrl(rawMediaUrl, '320');
 
       const title = song.title || 'Unknown Track';
-      const performer = song.more_info?.artists?.primary?.map((a: any) => a.name).join(', ') || song.subtitle || 'JioSaavn';
+      const performer =
+        song.more_info?.artists?.primary?.map((a: any) => a.name).join(', ') ||
+        song.subtitle ||
+        'JioSaavn';
       const duration = parseInt(song.more_info?.duration, 10) || 0;
       const thumbUrl = song.image ? song.image.replace(/150x150|50x50/, '500x500') : undefined;
 
-      // Try sending via URL first (super fast)
+      // Try sending via URL first (fast path)
       try {
         await ctx.replyWithAudio(audioUrl, {
-          title: title,
-          performer: performer,
-          duration: duration,
+          title,
+          performer,
+          duration,
           thumbnail: thumbUrl,
           caption: `🎵 *${escapeMd(title)}*\n👤 ${escapeMd(performer)}\n\n🤖 @saavnmusicbot`,
           parse_mode: 'MarkdownV2',
         });
-      } catch (urlErr) {
-        // Fallback: download buffer and send if URL fails
+      } catch {
+        // Fallback: download buffer and send
         const audioBuffer = await axios.get(audioUrl, { responseType: 'arraybuffer' });
         const inputFile = new InputFile(Buffer.from(audioBuffer.data), `${title}.mp3`);
         await ctx.replyWithAudio(inputFile, {
-          title: title,
-          performer: performer,
-          duration: duration,
+          title,
+          performer,
+          duration,
           thumbnail: thumbUrl,
           caption: `🎵 *${escapeMd(title)}*\n👤 ${escapeMd(performer)}\n\n🤖 @saavnmusicbot`,
           parse_mode: 'MarkdownV2',
         });
       }
 
-      // Delete status message
       await ctx.api.deleteMessage(ctx.chat!.id, statusMsg.message_id).catch(() => {});
     } catch (err) {
       console.error('Download error:', err);
@@ -111,7 +133,7 @@ bot.on('callback_query:data', async (ctx) => {
 bot.on('message:text', async (ctx) => {
   const text = ctx.message.text.trim();
 
-  // Check if it's a JioSaavn URL
+  // ── JioSaavn direct URL ───────────────────────────────────────────────────
   if (text.includes('jiosaavn.com/song/')) {
     const statusMsg = await ctx.reply('⏳ *Musiqa ma\'lumotlari olinmoqda...*', { parse_mode: 'MarkdownV2' });
 
@@ -124,17 +146,17 @@ bot.on('message:text', async (ctx) => {
         return;
       }
 
-      const keyboard = new InlineKeyboard().text(
-        '⬇️ Musiqani yuklab olish (320 kbps)',
-        `dl_${encodeURIComponent(song.perma_url)}`
-      );
+      const cacheId = cacheSong(song.perma_url);
+      const keyboard = new InlineKeyboard().text('⬇️ Musiqani yuklab olish (320 kbps)', `dl_${cacheId}`);
 
       const title = escapeMd(song.title);
-      const artists = escapeMd(song.more_info?.artists?.primary?.map((a: any) => a.name).join(', ') || song.subtitle);
+      const artists = escapeMd(
+        song.more_info?.artists?.primary?.map((a: any) => a.name).join(', ') || song.subtitle
+      );
       const album = escapeMd(song.more_info?.album || '');
       const duration = formatDuration(song.more_info?.duration);
 
-      const caption = 
+      const caption =
         `🎵 *${title}*\n` +
         `👤 *Xonanda:* ${artists}\n` +
         `💿 *Albom:* ${album}\n` +
@@ -154,12 +176,18 @@ bot.on('message:text', async (ctx) => {
         });
       }
     } catch (err) {
-      await ctx.api.editMessageText(ctx.chat.id, statusMsg.message_id, '❌ *Musiqani olishda xatolik yuz berdi\\.*', { parse_mode: 'MarkdownV2' });
+      console.error('URL fetch error:', err);
+      await ctx.api.editMessageText(
+        ctx.chat.id,
+        statusMsg.message_id,
+        '❌ *Musiqani olishda xatolik yuz berdi\\.*',
+        { parse_mode: 'MarkdownV2' }
+      );
     }
     return;
   }
 
-  // Otherwise, treat as Search Query
+  // ── Search query ──────────────────────────────────────────────────────────
   const statusMsg = await ctx.reply('🔍 *Qidirilmoqda...*', { parse_mode: 'MarkdownV2' });
 
   try {
@@ -178,20 +206,21 @@ bot.on('message:text', async (ctx) => {
 
     const topResults = results.slice(0, 8);
     const keyboard = new InlineKeyboard();
-
     let msgText = `🔍 "*${escapeMd(text)}*" bo'yicha qidiruv natijalari:\n\n`;
 
     topResults.forEach((song: any, index: number) => {
       const title = song.title || 'Track';
-      const artist = song.more_info?.artists?.primary?.map((a: any) => a.name).join(', ') || song.subtitle || '';
+      const artist =
+        song.more_info?.artists?.primary?.map((a: any) => a.name).join(', ') ||
+        song.subtitle ||
+        '';
       const dur = formatDuration(song.more_info?.duration);
 
       msgText += `${index + 1}\\. *${escapeMd(title)}*\n   👤 ${escapeMd(artist)} \\(${dur}\\)\n\n`;
 
-      keyboard.text(
-        `🎵 ${index + 1}. ${title.slice(0, 25)}`,
-        `dl_${encodeURIComponent(song.perma_url)}`
-      ).row();
+      // Use short cache ID (max 7 bytes: "dl_XXXX") instead of full URL
+      const cacheId = cacheSong(song.perma_url);
+      keyboard.text(`🎵 ${index + 1}. ${title.slice(0, 25)}`, `dl_${cacheId}`).row();
     });
 
     await ctx.api.editMessageText(ctx.chat.id, statusMsg.message_id, msgText, {
@@ -209,6 +238,6 @@ bot.on('message:text', async (ctx) => {
   }
 });
 
-// Launch Bot
+// ── Launch ────────────────────────────────────────────────────────────────────
 bot.start();
 console.log('🤖 JioSaavn Telegram Bot is running...');
