@@ -295,6 +295,13 @@ bot.on('message:text', async (ctx) => {
   }
 });
 
+// ── Global error handler (prevents crash loops) ───────────────────────────────
+bot.catch((err) => {
+  const ctx = err.ctx;
+  console.error(`Error while handling update ${ctx.update.update_id}:`, err.error);
+  // Silently swallow errors so PM2 doesn't restart the process unnecessarily
+});
+
 // ── Launch ────────────────────────────────────────────────────────────────────
 bot.start();
 console.log('🤖 JioSaavn Telegram Bot is running...');
