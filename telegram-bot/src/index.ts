@@ -71,6 +71,37 @@ function formatDuration(secStr: string | number): string {
   return `${m}:${sec < 10 ? '0' : ''}${sec}`;
 }
 
+async function downloadAndSendAudio(ctx: any, permaUrl: string, quality: Quality): Promise<boolean> {
+  try {
+    const resp = await axios.get(`${SONG_API}?url=${encodeURIComponent(permaUrl)}`);
+    const song = resp.data;
+
+    if (!song?.more_info?.encrypted_media_url) return false;
+
+    const rawMediaUrl = decryptMediaUrl(song.more_info.encrypted_media_url);
+    const audioUrl = getQualityUrl(rawMediaUrl, quality);
+
+    const title = song.title || 'Unknown Track';
+    const performer = song.more_info?.artists?.primary?.map((a: any) => a.name).join(', ') || song.subtitle || 'JioSaavn';
+    const duration = parseInt(song.more_info?.duration, 10) || 0;
+    const thumbUrl = song.image ? song.image.replace(/150x150|50x50/, '500x500') : undefined;
+
+    const caption = `🎵 *${escapeMd(title)}*\n👤 ${escapeMd(performer)}\n🔊 ${quality} kbps\n\n🤖 @saavnmusicbot`;
+
+    try {
+      await ctx.replyWithAudio(audioUrl, { title, performer, duration, thumbnail: thumbUrl, caption, parse_mode: 'MarkdownV2' });
+    } catch {
+      const audioBuffer = await axios.get(audioUrl, { responseType: 'arraybuffer' });
+      const inputFile = new InputFile(Buffer.from(audioBuffer.data), `${title}.mp3`);
+      await ctx.replyWithAudio(inputFile, { title, performer, duration, thumbnail: thumbUrl, caption, parse_mode: 'MarkdownV2' });
+    }
+    return true;
+  } catch (err) {
+    console.error('Download error:', err);
+    return false;
+  }
+}
+
 type SearchType = 'song' | 'album' | 'artist';
 
 async function renderSearch(
@@ -249,13 +280,14 @@ bot.on('callback_query:data', async (ctx) => {
   // ── Album Fetch ──────────────────────────────────────────────────────────
   if (data.startsWith('al_')) {
     const token = data.replace('al_', '');
-    await ctx.answerCallbackQuery({ text: '⏳ Albom yuklanmoqda...' });
+    const statusMsg = await ctx.reply('⏳ *Albom yuklanmoqda...*', { parse_mode: 'MarkdownV2' });
+    await ctx.answerCallbackQuery().catch(() => {});
     
     try {
       const resp = await axios.get(`${BASE_API}/album?token=${token}`);
       const album = resp.data;
       if (!album || !album.songs || album.songs.length === 0) {
-        await ctx.answerCallbackQuery({ text: '⚠️ Albom bo\'sh yoki topilmadi.' });
+        await ctx.api.editMessageText(ctx.chat!.id, statusMsg.message_id, '⚠️ *Albom bo\'sh yoki topilmadi.*', { parse_mode: 'MarkdownV2' });
         return;
       }
       
@@ -270,12 +302,13 @@ bot.on('callback_query:data', async (ctx) => {
         keyboard.text(`🎵 ${index + 1}. ${title.slice(0, 45)}`, `dl_${cacheId}`).row();
       });
       
+      keyboard.text('📥 Hammasini yuklab olish', `dla_${token}`).row();
       keyboard.text('❌ Yopish', 'close_msg');
       
-      await ctx.reply(msgText, { parse_mode: 'MarkdownV2', reply_markup: keyboard });
+      await ctx.api.editMessageText(ctx.chat!.id, statusMsg.message_id, msgText, { parse_mode: 'MarkdownV2', reply_markup: keyboard });
     } catch (err) {
       console.error('Album fetch error:', err);
-      await ctx.reply('❌ *Albomni yuklab bo\'lmadi\\.*', { parse_mode: 'MarkdownV2' });
+      await ctx.api.editMessageText(ctx.chat!.id, statusMsg.message_id, '❌ *Albomni yuklab bo\'lmadi\\.*', { parse_mode: 'MarkdownV2' });
     }
     return;
   }
@@ -283,13 +316,14 @@ bot.on('callback_query:data', async (ctx) => {
   // ── Artist Fetch ─────────────────────────────────────────────────────────
   if (data.startsWith('ar_')) {
     const token = data.replace('ar_', '');
-    await ctx.answerCallbackQuery({ text: '⏳ Xonanda ma\'lumotlari yuklanmoqda...' });
+    const statusMsg = await ctx.reply('⏳ *Xonanda ma\'lumotlari yuklanmoqda...*', { parse_mode: 'MarkdownV2' });
+    await ctx.answerCallbackQuery().catch(() => {});
     
     try {
       const resp = await axios.get(`${BASE_API}/artist?token=${token}`);
       const artist = resp.data;
       if (!artist || !artist.topSongs || artist.topSongs.length === 0) {
-        await ctx.answerCallbackQuery({ text: '⚠️ Qo\'shiqlar topilmadi.' });
+        await ctx.api.editMessageText(ctx.chat!.id, statusMsg.message_id, '⚠️ *Ushbu xonanda uchun mashhur qo\'shiqlar topilmadi.*', { parse_mode: 'MarkdownV2' });
         return;
       }
       
@@ -304,12 +338,63 @@ bot.on('callback_query:data', async (ctx) => {
         keyboard.text(`🎵 ${index + 1}. ${title.slice(0, 45)}`, `dl_${cacheId}`).row();
       });
       
+      keyboard.text('📥 Hammasini yuklab olish', `dlar_${token}`).row();
       keyboard.text('❌ Yopish', 'close_msg');
       
-      await ctx.reply(msgText, { parse_mode: 'MarkdownV2', reply_markup: keyboard });
+      await ctx.api.editMessageText(ctx.chat!.id, statusMsg.message_id, msgText, { parse_mode: 'MarkdownV2', reply_markup: keyboard });
     } catch (err) {
       console.error('Artist fetch error:', err);
-      await ctx.reply('❌ *Xonanda ma\'lumotlarini yuklab bo\'lmadi\\.*', { parse_mode: 'MarkdownV2' });
+      await ctx.api.editMessageText(ctx.chat!.id, statusMsg.message_id, '❌ *Xonanda ma\'lumotlarini yuklab bo\'lmadi\\.*', { parse_mode: 'MarkdownV2' });
+    }
+    return;
+  }
+
+  // ── Download All (Album & Artist) ────────────────────────────────────────
+  if (data.startsWith('dla_') || data.startsWith('dlar_')) {
+    const isArtist = data.startsWith('dlar_');
+    const token = data.replace(isArtist ? 'dlar_' : 'dla_', '');
+    
+    await ctx.answerCallbackQuery({ text: '⏳ Barcha musiqalar yuklanmoqda...' });
+    const statusMsg = await ctx.reply('⏳ *Musiqalar tayyorlanmoqda...*', { parse_mode: 'MarkdownV2' });
+    
+    try {
+      const url = isArtist ? `${BASE_API}/artist?token=${token}` : `${BASE_API}/album?token=${token}`;
+      const resp = await axios.get(url);
+      const items = isArtist ? resp.data?.topSongs : resp.data?.songs;
+      
+      if (!items || !Array.isArray(items) || items.length === 0) {
+        await ctx.api.editMessageText(ctx.chat!.id, statusMsg.message_id, '❌ *Musiqalar topilmadi\\.*', { parse_mode: 'MarkdownV2' });
+        return;
+      }
+      
+      const quality = getUserQuality(userId);
+      let successCount = 0;
+      
+      for (let i = 0; i < items.length; i++) {
+        await ctx.api.editMessageText(
+          ctx.chat!.id, 
+          statusMsg.message_id, 
+          `⏳ *Yuklanmoqda: ${i + 1} / ${items.length}*`, 
+          { parse_mode: 'MarkdownV2' }
+        ).catch(() => {});
+        
+        const permaUrl = items[i].perma_url || items[i].track_url || items[i].url;
+        if (permaUrl) {
+          const ok = await downloadAndSendAudio(ctx, permaUrl, quality);
+          if (ok) successCount++;
+        }
+      }
+      
+      await ctx.api.editMessageText(
+        ctx.chat!.id, 
+        statusMsg.message_id, 
+        `✅ *Yakunlandi! ${successCount}/${items.length} ta musiqa yuklandi.*`, 
+        { parse_mode: 'MarkdownV2' }
+      ).catch(() => {});
+      
+    } catch (err) {
+      console.error('Download All error:', err);
+      await ctx.api.editMessageText(ctx.chat!.id, statusMsg.message_id, '❌ *Kutilmagan xatolik yuz berdi\\.*', { parse_mode: 'MarkdownV2' }).catch(() => {});
     }
     return;
   }
@@ -328,55 +413,10 @@ bot.on('callback_query:data', async (ctx) => {
     await ctx.answerCallbackQuery({ text: `⬇️ ${quality} kbps sifatida yuklanmoqda…` });
     const statusMsg = await ctx.reply('⏳ *Musiqa tayyorlanmoqda, kuting…*', { parse_mode: 'MarkdownV2' });
 
-    try {
-      const resp = await axios.get(`${SONG_API}?url=${encodeURIComponent(permaUrl)}`);
-      const song = resp.data;
-
-      if (!song?.more_info?.encrypted_media_url) {
-        await ctx.api.editMessageText(
-          ctx.chat!.id,
-          statusMsg.message_id,
-          '❌ *Musiqa ma\'lumotlarini olib bo\'lmadi\\.*',
-          { parse_mode: 'MarkdownV2' }
-        );
-        return;
-      }
-
-      const rawMediaUrl = decryptMediaUrl(song.more_info.encrypted_media_url);
-      const audioUrl = getQualityUrl(rawMediaUrl, quality);
-
-      const title = song.title || 'Unknown Track';
-      const performer =
-        song.more_info?.artists?.primary?.map((a: any) => a.name).join(', ') ||
-        song.subtitle ||
-        'JioSaavn';
-      const duration = parseInt(song.more_info?.duration, 10) || 0;
-      const thumbUrl = song.image ? song.image.replace(/150x150|50x50/, '500x500') : undefined;
-
-      const caption =
-        `🎵 *${escapeMd(title)}*\n` +
-        `👤 ${escapeMd(performer)}\n` +
-        `🔊 ${quality} kbps\n\n` +
-        `🤖 @saavnmusicbot`;
-
-      try {
-        await ctx.replyWithAudio(audioUrl, {
-          title,
-          performer,
-          duration,
-          thumbnail: thumbUrl,
-          caption,
-          parse_mode: 'MarkdownV2',
-        });
-      } catch {
-        const audioBuffer = await axios.get(audioUrl, { responseType: 'arraybuffer' });
-        const inputFile = new InputFile(Buffer.from(audioBuffer.data), `${title}.mp3`);
-        await ctx.replyWithAudio(inputFile, { title, performer, duration, thumbnail: thumbUrl, caption, parse_mode: 'MarkdownV2' });
-      }
-
+    const ok = await downloadAndSendAudio(ctx, permaUrl, quality);
+    if (ok) {
       await ctx.api.deleteMessage(ctx.chat!.id, statusMsg.message_id).catch(() => {});
-    } catch (err) {
-      console.error('Download error:', err);
+    } else {
       await ctx.api.editMessageText(
         ctx.chat!.id,
         statusMsg.message_id,
