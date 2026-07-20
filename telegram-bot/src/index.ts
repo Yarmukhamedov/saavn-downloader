@@ -287,7 +287,7 @@ bot.on('callback_query:data', async (ctx) => {
       const resp = await axios.get(`${BASE_API}/album?token=${token}`);
       const album = resp.data;
       if (!album || !album.songs || album.songs.length === 0) {
-        await ctx.api.editMessageText(ctx.chat!.id, statusMsg.message_id, '⚠️ *Albom bo\'sh yoki topilmadi.*', { parse_mode: 'MarkdownV2' });
+        await ctx.api.editMessageText(ctx.chat!.id, statusMsg.message_id, '⚠️ *Albom bo\'sh yoki topilmadi\\.*', { parse_mode: 'MarkdownV2' });
         return;
       }
       
@@ -323,7 +323,7 @@ bot.on('callback_query:data', async (ctx) => {
       const resp = await axios.get(`${BASE_API}/artist?token=${token}`);
       const artist = resp.data;
       if (!artist || !artist.topSongs || artist.topSongs.length === 0) {
-        await ctx.api.editMessageText(ctx.chat!.id, statusMsg.message_id, '⚠️ *Ushbu xonanda uchun mashhur qo\'shiqlar topilmadi.*', { parse_mode: 'MarkdownV2' });
+        await ctx.api.editMessageText(ctx.chat!.id, statusMsg.message_id, '⚠️ *Ushbu xonanda uchun mashhur qo\'shiqlar topilmadi\\.*', { parse_mode: 'MarkdownV2' });
         return;
       }
       
