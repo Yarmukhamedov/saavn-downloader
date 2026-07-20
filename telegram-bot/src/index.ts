@@ -327,8 +327,7 @@ bot.on('callback_query:data', async (ctx) => {
       const msgText = `👤 *${escapeMd(artist.name)}*\n\nMa'lumotlarni tanlang:`;
       
       keyboard.text('🔥 TOP 10', `artop_${token}`).row();
-      const searchId = cacheSearch(artist.name || 'Unknown');
-      keyboard.text('💿 Albomlar', `sp_${searchId}_album_1`).row();
+      keyboard.text('💿 Albomlar', `aralb_${token}`).row();
       keyboard.text('❌ Yopish', 'close_msg');
       
       await ctx.api.editMessageText(ctx.chat!.id, statusMsg.message_id, msgText, { parse_mode: 'MarkdownV2', reply_markup: keyboard });
@@ -364,14 +363,56 @@ bot.on('callback_query:data', async (ctx) => {
         keyboard.text(`🎵 ${index + 1}. ${title.slice(0, 45)}`, `dl_${cacheId}`).row();
       });
       
-      const searchId = cacheSearch(artist.name || 'Unknown');
-      keyboard.text('💿 Albomlar', `sp_${searchId}_album_1`).row();
+      keyboard.text('💿 Albomlar', `aralb_${token}`).row();
       keyboard.text('❌ Yopish', 'close_msg');
       
       await ctx.api.editMessageText(ctx.chat!.id, statusMsg.message_id, msgText, { parse_mode: 'MarkdownV2', reply_markup: keyboard });
     } catch (err) {
       console.error('Artist Top 10 fetch error:', err);
       await ctx.api.editMessageText(ctx.chat!.id, statusMsg.message_id, `❌ *Qo'shiqlarni yuklab bo'lmadi\\.*`, { parse_mode: 'MarkdownV2' });
+    }
+    return;
+  }
+
+  // ── Artist Albums Fetch ──────────────────────────────────────────────────
+  if (data.startsWith('aralb_')) {
+    const token = data.replace('aralb_', '');
+    const statusMsg = await ctx.reply(`⏳ *Albomlar yuklanmoqda…*`, { parse_mode: 'MarkdownV2' });
+    await ctx.answerCallbackQuery().catch(() => {});
+    
+    try {
+      const resp = await axios.get(`${BASE_API}/artist?token=${token}`);
+      const artist = resp.data;
+      
+      const allAlbums = [
+        ...(artist.topAlbums || []),
+        ...(artist.latest_release || []),
+        ...(artist.singles || [])
+      ];
+      
+      const uniqueAlbums = Array.from(new Map(allAlbums.map(a => [a.token, a])).values());
+      
+      if (!uniqueAlbums || uniqueAlbums.length === 0) {
+        await ctx.api.editMessageText(ctx.chat!.id, statusMsg.message_id, `⚠️ *Ushbu xonanda uchun albomlar topilmadi\\.*`, { parse_mode: 'MarkdownV2' });
+        return;
+      }
+      
+      const keyboard = new InlineKeyboard();
+      let msgText = `👤 *${escapeMd(artist.name)}* — 💿 *Albom va Singllari:*\n\n`;
+      
+      uniqueAlbums.slice(0, 15).forEach((album: any, index: number) => {
+        const title = album.title || 'Album';
+        const btnText = title;
+        keyboard.text(`💿 ${index + 1}. ${btnText.slice(0, 45)}`, `al_${album.token}`).row();
+      });
+      
+      keyboard.text('⬅️ Orqaga', `ar_${token}`).row();
+      keyboard.text('❌ Yopish', 'close_msg');
+      
+      await ctx.api.editMessageText(ctx.chat!.id, statusMsg.message_id, msgText, { parse_mode: 'MarkdownV2', reply_markup: keyboard });
+    } catch (err) {
+      console.error('Artist Albums fetch error:', err);
+      await ctx.api.editMessageText(ctx.chat!.id, statusMsg.message_id, `❌ *Albomlarni yuklab bo'lmadi\\.*`, { parse_mode: 'MarkdownV2' });
     }
     return;
   }
