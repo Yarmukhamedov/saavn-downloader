@@ -65,7 +65,7 @@ bot.on('callback_query:data', async (ctx) => {
     }
 
     await ctx.answerCallbackQuery({ text: 'Musiqa yuklanmoqda...' });
-    const statusMsg = await ctx.reply('⏳ *Musiqa tayyorlanmoqda, kuting...*', { parse_mode: 'MarkdownV2' });
+    const statusMsg = await ctx.reply('⏳ *Musiqa tayyorlanmoqda, kuting…*', { parse_mode: 'MarkdownV2' });
 
     try {
       const resp = await axios.get(`${SONG_API}?url=${encodeURIComponent(permaUrl)}`);
@@ -135,7 +135,7 @@ bot.on('message:text', async (ctx) => {
 
   // ── JioSaavn direct URL ───────────────────────────────────────────────────
   if (text.includes('jiosaavn.com/song/')) {
-    const statusMsg = await ctx.reply('⏳ *Musiqa ma\'lumotlari olinmoqda...*', { parse_mode: 'MarkdownV2' });
+    const statusMsg = await ctx.reply('⏳ *Musiqa ma\'lumotlari olinmoqda…*', { parse_mode: 'MarkdownV2' });
 
     try {
       const resp = await axios.get(`${SONG_API}?url=${encodeURIComponent(text)}`);
@@ -188,7 +188,7 @@ bot.on('message:text', async (ctx) => {
   }
 
   // ── Search query ──────────────────────────────────────────────────────────
-  const statusMsg = await ctx.reply('🔍 *Qidirilmoqda...*', { parse_mode: 'MarkdownV2' });
+  const statusMsg = await ctx.reply('🔍 *Qidirilmoqda…*', { parse_mode: 'MarkdownV2' });
 
   try {
     const resp = await axios.get(`${SEARCH_API}${encodeURIComponent(text)}`);
