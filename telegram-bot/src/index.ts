@@ -12,25 +12,45 @@ const SONG_API = process.env.SONG_API || 'https://sda.ymkhdv.workers.dev/song';
 const bot = new Bot(BOT_TOKEN);
 
 // ── Song cache (solves Telegram's 64-byte callback_data limit) ────────────────
-// Instead of storing the full URL in callback_data, we store a short numeric ID
-// and look up the full URL from this map.
 const songCache = new Map<string, string>(); // cacheId -> perma_url
 let cacheSeq = 0;
 
 function cacheSong(permaUrl: string): string {
   const id = String(cacheSeq++ % 9999).padStart(4, '0');
   songCache.set(id, permaUrl);
-  return id; // e.g. "0042" → callback_data: "dl_0042" (7 bytes, well under 64)
+  return id;
+}
+
+// ── User quality preferences ──────────────────────────────────────────────────
+type Quality = '96' | '160' | '320';
+const userQuality = new Map<number, Quality>(); // userId -> preferred quality
+const DEFAULT_QUALITY: Quality = '320';
+
+function getUserQuality(userId: number): Quality {
+  return userQuality.get(userId) || DEFAULT_QUALITY;
+}
+
+const QUALITY_LABELS: Record<Quality, string> = {
+  '96':  '📻 96 kbps  — Yengil',
+  '160': '🎧 160 kbps — O\'rta',
+  '320': '🔊 320 kbps — Yuqori',
+};
+
+function buildQualityKeyboard(current: Quality): InlineKeyboard {
+  const keyboard = new InlineKeyboard();
+  (Object.keys(QUALITY_LABELS) as Quality[]).forEach((q) => {
+    const check = current === q ? '✅ ' : '';
+    keyboard.text(`${check}${QUALITY_LABELS[q]}`, `setq_${q}`).row();
+  });
+  return keyboard;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-// Escape MarkdownV2 special characters
 function escapeMd(text: string = ''): string {
   return text.replace(/[_*[\]()~`>#+\-=|{}.!]/g, '\\$&');
 }
 
-// Format seconds into MM:SS
 function formatDuration(secStr: string | number): string {
   const s = parseInt(String(secStr), 10) || 0;
   const m = Math.floor(s / 60);
@@ -38,11 +58,13 @@ function formatDuration(secStr: string | number): string {
   return `${m}:${sec < 10 ? '0' : ''}${sec}`;
 }
 
-// ── Start Command ─────────────────────────────────────────────────────────────
+// ── /start ────────────────────────────────────────────────────────────────────
 bot.command('start', async (ctx) => {
   const welcomeText =
     `🎧 *JioSaavn Music Downloader Bot*\\!\n\n` +
     `Menga qo'shiq nomini yozing yoki JioSaavn havolasini yuboring\\.\n\n` +
+    `*Buyruqlar:*\n` +
+    `• /quality — musiqa sifatini sozlash\n\n` +
     `*Misollar:*\n` +
     `• \`Blinding Lights\`\n` +
     `• \`Tum Hi Ho\`\n` +
@@ -51,10 +73,42 @@ bot.command('start', async (ctx) => {
   await ctx.reply(welcomeText, { parse_mode: 'MarkdownV2' });
 });
 
-// ── Callback Query (Download song) ───────────────────────────────────────────
+// ── /quality ──────────────────────────────────────────────────────────────────
+bot.command('quality', async (ctx) => {
+  const userId = ctx.from?.id ?? 0;
+  const current = getUserQuality(userId);
+
+  await ctx.reply(
+    `🎚 *Musiqa sifatini tanlang*\n\nHozirgi sifat: *${escapeMd(QUALITY_LABELS[current])}*`,
+    { parse_mode: 'MarkdownV2', reply_markup: buildQualityKeyboard(current) }
+  );
+});
+
+// ── Callback queries ──────────────────────────────────────────────────────────
 bot.on('callback_query:data', async (ctx) => {
   const data = ctx.callbackQuery.data;
+  const userId = ctx.from?.id ?? 0;
 
+  // ── Quality selection ────────────────────────────────────────────────────
+  if (data.startsWith('setq_')) {
+    const selected = data.replace('setq_', '') as Quality;
+
+    if (!['96', '160', '320'].includes(selected)) {
+      await ctx.answerCallbackQuery({ text: '❌ Noto\'g\'ri sifat.' });
+      return;
+    }
+
+    userQuality.set(userId, selected);
+
+    await ctx.editMessageText(
+      `🎚 *Musiqa sifati saqlandi\\!*\n\nHozirgi sifat: *${escapeMd(QUALITY_LABELS[selected])}*`,
+      { parse_mode: 'MarkdownV2', reply_markup: buildQualityKeyboard(selected) }
+    );
+    await ctx.answerCallbackQuery({ text: `✅ ${selected} kbps tanlandi!` });
+    return;
+  }
+
+  // ── Song download ────────────────────────────────────────────────────────
   if (data.startsWith('dl_')) {
     const cacheId = data.replace('dl_', '');
     const permaUrl = songCache.get(cacheId);
@@ -64,7 +118,8 @@ bot.on('callback_query:data', async (ctx) => {
       return;
     }
 
-    await ctx.answerCallbackQuery({ text: 'Musiqa yuklanmoqda...' });
+    const quality = getUserQuality(userId);
+    await ctx.answerCallbackQuery({ text: `⬇️ ${quality} kbps sifatida yuklanmoqda…` });
     const statusMsg = await ctx.reply('⏳ *Musiqa tayyorlanmoqda, kuting…*', { parse_mode: 'MarkdownV2' });
 
     try {
@@ -82,7 +137,7 @@ bot.on('callback_query:data', async (ctx) => {
       }
 
       const rawMediaUrl = decryptMediaUrl(song.more_info.encrypted_media_url);
-      const audioUrl = getQualityUrl(rawMediaUrl, '320');
+      const audioUrl = getQualityUrl(rawMediaUrl, quality);
 
       const title = song.title || 'Unknown Track';
       const performer =
@@ -92,28 +147,25 @@ bot.on('callback_query:data', async (ctx) => {
       const duration = parseInt(song.more_info?.duration, 10) || 0;
       const thumbUrl = song.image ? song.image.replace(/150x150|50x50/, '500x500') : undefined;
 
-      // Try sending via URL first (fast path)
+      const caption =
+        `🎵 *${escapeMd(title)}*\n` +
+        `👤 ${escapeMd(performer)}\n` +
+        `🔊 ${quality} kbps\n\n` +
+        `🤖 @saavnmusicbot`;
+
       try {
         await ctx.replyWithAudio(audioUrl, {
           title,
           performer,
           duration,
           thumbnail: thumbUrl,
-          caption: `🎵 *${escapeMd(title)}*\n👤 ${escapeMd(performer)}\n\n🤖 @saavnmusicbot`,
+          caption,
           parse_mode: 'MarkdownV2',
         });
       } catch {
-        // Fallback: download buffer and send
         const audioBuffer = await axios.get(audioUrl, { responseType: 'arraybuffer' });
         const inputFile = new InputFile(Buffer.from(audioBuffer.data), `${title}.mp3`);
-        await ctx.replyWithAudio(inputFile, {
-          title,
-          performer,
-          duration,
-          thumbnail: thumbUrl,
-          caption: `🎵 *${escapeMd(title)}*\n👤 ${escapeMd(performer)}\n\n🤖 @saavnmusicbot`,
-          parse_mode: 'MarkdownV2',
-        });
+        await ctx.replyWithAudio(inputFile, { title, performer, duration, thumbnail: thumbUrl, caption, parse_mode: 'MarkdownV2' });
       }
 
       await ctx.api.deleteMessage(ctx.chat!.id, statusMsg.message_id).catch(() => {});
@@ -129,11 +181,11 @@ bot.on('callback_query:data', async (ctx) => {
   }
 });
 
-// ── Text Messages (Search or URL input) ──────────────────────────────────────
+// ── Text Messages ─────────────────────────────────────────────────────────────
 bot.on('message:text', async (ctx) => {
   const text = ctx.message.text.trim();
 
-  // ── JioSaavn direct URL ───────────────────────────────────────────────────
+  // ── JioSaavn direct URL ────────────────────────────────────────────────
   if (text.includes('jiosaavn.com/song/')) {
     const statusMsg = await ctx.reply('⏳ *Musiqa ma\'lumotlari olinmoqda…*', { parse_mode: 'MarkdownV2' });
 
@@ -147,7 +199,7 @@ bot.on('message:text', async (ctx) => {
       }
 
       const cacheId = cacheSong(song.perma_url);
-      const keyboard = new InlineKeyboard().text('⬇️ Musiqani yuklab olish (320 kbps)', `dl_${cacheId}`);
+      const keyboard = new InlineKeyboard().text('⬇️ Musiqani yuklab olish', `dl_${cacheId}`);
 
       const title = escapeMd(song.title);
       const artists = escapeMd(
@@ -155,12 +207,15 @@ bot.on('message:text', async (ctx) => {
       );
       const album = escapeMd(song.more_info?.album || '');
       const duration = formatDuration(song.more_info?.duration);
+      const userId = ctx.from?.id ?? 0;
+      const quality = getUserQuality(userId);
 
       const caption =
         `🎵 *${title}*\n` +
         `👤 *Xonanda:* ${artists}\n` +
         `💿 *Albom:* ${album}\n` +
-        `⏱ *Davomiyligi:* ${duration}`;
+        `⏱ *Davomiyligi:* ${duration}\n` +
+        `🔊 *Sifat:* ${quality} kbps`;
 
       if (song.image) {
         await ctx.replyWithPhoto(song.image.replace(/150x150|50x50/, '500x500'), {
@@ -187,8 +242,10 @@ bot.on('message:text', async (ctx) => {
     return;
   }
 
-  // ── Search query ──────────────────────────────────────────────────────────
+  // ── Search query ────────────────────────────────────────────────────────
   const statusMsg = await ctx.reply('🔍 *Qidirilmoqda…*', { parse_mode: 'MarkdownV2' });
+  const userId = ctx.from?.id ?? 0;
+  const quality = getUserQuality(userId);
 
   try {
     const resp = await axios.get(`${SEARCH_API}${encodeURIComponent(text)}`);
@@ -206,7 +263,8 @@ bot.on('message:text', async (ctx) => {
 
     const topResults = results.slice(0, 8);
     const keyboard = new InlineKeyboard();
-    let msgText = `🔍 "*${escapeMd(text)}*" bo'yicha qidiruv natijalari:\n\n`;
+    let msgText =
+      `🔍 "*${escapeMd(text)}*" bo'yicha natijalar \\(${quality} kbps\\):\n\n`;
 
     topResults.forEach((song: any, index: number) => {
       const title = song.title || 'Track';
@@ -218,7 +276,6 @@ bot.on('message:text', async (ctx) => {
 
       msgText += `${index + 1}\\. *${escapeMd(title)}*\n   👤 ${escapeMd(artist)} \\(${dur}\\)\n\n`;
 
-      // Use short cache ID (max 7 bytes: "dl_XXXX") instead of full URL
       const cacheId = cacheSong(song.perma_url);
       keyboard.text(`🎵 ${index + 1}. ${title.slice(0, 25)}`, `dl_${cacheId}`).row();
     });
