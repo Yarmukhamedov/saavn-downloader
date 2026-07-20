@@ -139,8 +139,6 @@ async function renderSearch(
       topResults.forEach((song: any, index: number) => {
         const title = song.title || 'Track';
         const artist = song.more_info?.artists?.primary?.map((a: any) => a.name).join(', ') || song.subtitle || '';
-        const dur = formatDuration(song.more_info?.duration || song.duration);
-        msgText += `${index + 1}\\. *${escapeMd(title)}*\n   👤 ${escapeMd(artist)} \\(${dur}\\)\n\n`;
         const cacheId = cacheSong(song.perma_url || song.track_url);
         const btnText = artist ? `${artist} - ${title}` : title;
         keyboard.text(`🎵 ${index + 1}. ${btnText.slice(0, 45)}`, `dl_${cacheId}`).row();
@@ -149,14 +147,12 @@ async function renderSearch(
       topResults.forEach((album: any, index: number) => {
         const title = album.title || 'Album';
         const subtitle = album.subtitle || '';
-        msgText += `${index + 1}\\. *${escapeMd(title)}*\n   💿 ${escapeMd(subtitle)}\n\n`;
         const btnText = subtitle ? `${title} - ${subtitle}` : title;
         keyboard.text(`💿 ${index + 1}. ${btnText.slice(0, 45)}`, `al_${album.token}`).row();
       });
     } else if (type === 'artist') {
       topResults.forEach((artist: any, index: number) => {
         const name = artist.name || 'Artist';
-        msgText += `${index + 1}\\. *${escapeMd(name)}*\n\n`;
         keyboard.text(`👤 ${index + 1}. ${name.slice(0, 45)}`, `ar_${artist.token}`).row();
       });
     }
@@ -360,7 +356,7 @@ bot.on('callback_query:data', async (ctx) => {
       const keyboard = new InlineKeyboard();
       let msgText = `👤 *${escapeMd(artist.name)}*\n🔥 *TOP 10 qo'shiqlari:*\n\n`;
       
-      artist.topSongs.forEach((song: any, index: number) => {
+      artist.topSongs.slice(0, 10).forEach((song: any, index: number) => {
         const title = song.title || 'Track';
         const dur = formatDuration(song.duration || song.more_info?.duration);
         msgText += `${index + 1}\\. *${escapeMd(title)}* \\(${dur}\\)\n`;
