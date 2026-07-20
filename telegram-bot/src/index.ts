@@ -338,7 +338,8 @@ bot.on('callback_query:data', async (ctx) => {
         keyboard.text(`🎵 ${index + 1}. ${title.slice(0, 45)}`, `dl_${cacheId}`).row();
       });
       
-      keyboard.text('📥 Hammasini yuklab olish', `dlar_${token}`).row();
+      const searchId = cacheSearch(artist.name || 'Unknown');
+      keyboard.text('💿 Albomlar', `sp_${searchId}_album_1`).row();
       keyboard.text('❌ Yopish', 'close_msg');
       
       await ctx.api.editMessageText(ctx.chat!.id, statusMsg.message_id, msgText, { parse_mode: 'MarkdownV2', reply_markup: keyboard });
