@@ -280,7 +280,7 @@ bot.on('callback_query:data', async (ctx) => {
   // ── Album Fetch ──────────────────────────────────────────────────────────
   if (data.startsWith('al_')) {
     const token = data.replace('al_', '');
-    const statusMsg = await ctx.reply('⏳ *Albom yuklanmoqda...*', { parse_mode: 'MarkdownV2' });
+    const statusMsg = await ctx.reply('⏳ *Albom yuklanmoqda…*', { parse_mode: 'MarkdownV2' });
     await ctx.answerCallbackQuery().catch(() => {});
     
     try {
@@ -316,7 +316,7 @@ bot.on('callback_query:data', async (ctx) => {
   // ── Artist Fetch ─────────────────────────────────────────────────────────
   if (data.startsWith('ar_')) {
     const token = data.replace('ar_', '');
-    const statusMsg = await ctx.reply('⏳ *Xonanda ma\'lumotlari yuklanmoqda...*', { parse_mode: 'MarkdownV2' });
+    const statusMsg = await ctx.reply('⏳ *Xonanda ma\'lumotlari yuklanmoqda…*', { parse_mode: 'MarkdownV2' });
     await ctx.answerCallbackQuery().catch(() => {});
     
     try {
@@ -355,7 +355,7 @@ bot.on('callback_query:data', async (ctx) => {
     const token = data.replace(isArtist ? 'dlar_' : 'dla_', '');
     
     await ctx.answerCallbackQuery({ text: '⏳ Barcha musiqalar yuklanmoqda...' });
-    const statusMsg = await ctx.reply('⏳ *Musiqalar tayyorlanmoqda...*', { parse_mode: 'MarkdownV2' });
+    const statusMsg = await ctx.reply('⏳ *Musiqalar tayyorlanmoqda…*', { parse_mode: 'MarkdownV2' });
     
     try {
       const url = isArtist ? `${BASE_API}/artist?token=${token}` : `${BASE_API}/album?token=${token}`;
