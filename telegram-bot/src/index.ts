@@ -597,11 +597,38 @@ bot.on('message:text', async (ctx) => {
     return;
   }
 
-  // ── Search query ────────────────────────────────────────────────────────
+  // ── Smart Search & Links ──────────────────────────────────────────────────
+  let query = text;
   const statusMsg = await ctx.reply('🔍 *Qidirilmoqda…*', { parse_mode: 'MarkdownV2' });
+
+  if (text.includes('spotify.com') || text.includes('apple.com')) {
+    try {
+      const res = await axios.get(text, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' } });
+      const match = res.data.match(/<title>(.*?)<\/title>/i);
+      if (match && match[1]) {
+        let title = match[1];
+        title = title.replace(/- song and lyrics by.*/i, '').replace(/\| Spotify/i, '');
+        title = title.replace(/by .*? on Apple Music/i, '').replace(/on Apple Music/i, '');
+        query = title.trim();
+      }
+    } catch (e) {
+      console.error('Link parse error:', e);
+    }
+  } else if (query.split(' ').length <= 2) {
+    try {
+      const itunes = await axios.get(`https://itunes.apple.com/search?term=${encodeURIComponent(query)}&entity=song&limit=1`);
+      if (itunes.data?.results?.length > 0) {
+        const item = itunes.data.results[0];
+        query = `${item.artistName} ${item.trackName}`;
+      }
+    } catch (e) {
+      console.error('iTunes API error:', e);
+    }
+  }
+
   const userId = ctx.from?.id ?? 0;
   const quality = getUserQuality(userId);
-  await renderSearch(ctx, text, 'song', 1, quality, statusMsg.message_id);
+  await renderSearch(ctx, query, 'song', 1, quality, statusMsg.message_id);
 });
 
 // ── Global error handler (prevents crash loops) ───────────────────────────────
