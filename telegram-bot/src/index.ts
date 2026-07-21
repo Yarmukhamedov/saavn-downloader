@@ -1,9 +1,16 @@
 import { Bot, InlineKeyboard, InputFile } from 'grammy';
 import axios from 'axios';
 import dotenv from 'dotenv';
+import fs from 'fs';
+import path from 'path';
+import crypto from 'crypto';
+import util from 'util';
+import { execFile } from 'child_process';
 import { decryptMediaUrl, getQualityUrl } from './decrypt.js';
 
 dotenv.config();
+
+const execFilePromise = util.promisify(execFile);
 
 const BOT_TOKEN = process.env.BOT_TOKEN || '8922942398:AAFsRjiocyDI7sCXDsfszkJvvzUrCzygeO4';
 const SEARCH_API = process.env.SEARCH_API || 'https://jiosaavn-api-eight-sigma.vercel.app/api/songs?q=';
@@ -72,6 +79,9 @@ function formatDuration(secStr: string | number): string {
 }
 
 async function downloadAndSendAudio(ctx: any, permaUrl: string, quality: Quality): Promise<boolean> {
+  let tmpAudioPath = '';
+  let tmpImgPath = '';
+  let tmpOutPath = '';
   try {
     const resp = await axios.get(`${SONG_API}?url=${encodeURIComponent(permaUrl)}`);
     const song = resp.data;
@@ -83,22 +93,57 @@ async function downloadAndSendAudio(ctx: any, permaUrl: string, quality: Quality
 
     const title = song.title || 'Unknown Track';
     const performer = song.more_info?.artists?.primary?.map((a: any) => a.name).join(', ') || song.subtitle || 'JioSaavn';
+    const albumName = song.more_info?.album || '';
+    const year = song.year || '';
     const duration = parseInt(song.more_info?.duration, 10) || 0;
     const thumbUrl = song.image ? song.image.replace(/150x150|50x50/, '500x500') : undefined;
 
     const caption = `🎵 *${escapeMd(title)}*\n👤 ${escapeMd(performer)}\n🔊 ${quality} kbps\n\n🤖 @saavnmusicbot`;
 
-    try {
-      await ctx.replyWithAudio(audioUrl, { title, performer, duration, thumbnail: thumbUrl, caption, parse_mode: 'MarkdownV2' });
-    } catch {
-      const audioBuffer = await axios.get(audioUrl, { responseType: 'arraybuffer' });
-      const inputFile = new InputFile(Buffer.from(audioBuffer.data), `${title}.mp3`);
-      await ctx.replyWithAudio(inputFile, { title, performer, duration, thumbnail: thumbUrl, caption, parse_mode: 'MarkdownV2' });
+    const reqId = crypto.randomBytes(8).toString('hex');
+    tmpAudioPath = path.join(process.cwd(), `tmp_${reqId}.m4a`);
+    tmpOutPath = path.join(process.cwd(), `out_${reqId}.m4a`);
+    
+    const audioBuffer = await axios.get(audioUrl, { responseType: 'arraybuffer' });
+    fs.writeFileSync(tmpAudioPath, audioBuffer.data);
+
+    const args = ['-y', '-i', tmpAudioPath];
+
+    if (thumbUrl) {
+      try {
+        const imgBuffer = await axios.get(thumbUrl, { responseType: 'arraybuffer' });
+        tmpImgPath = path.join(process.cwd(), `tmp_${reqId}.jpg`);
+        fs.writeFileSync(tmpImgPath, imgBuffer.data);
+        args.push('-i', tmpImgPath, '-map', '0', '-map', '1', '-c', 'copy', '-disposition:v:0', 'attached_pic');
+      } catch (e) {
+        console.error('Image download failed:', e);
+        args.push('-c', 'copy');
+      }
+    } else {
+      args.push('-c', 'copy');
     }
+
+    args.push(
+      '-metadata', `title=${title}`,
+      '-metadata', `artist=${performer}`,
+      '-metadata', `album=${albumName}`,
+      '-metadata', `date=${year}`,
+      tmpOutPath
+    );
+
+    await execFilePromise('ffmpeg', args);
+
+    const inputFile = new InputFile(tmpOutPath, `${title}.m4a`);
+    await ctx.replyWithAudio(inputFile, { title, performer, duration, thumbnail: thumbUrl, caption, parse_mode: 'MarkdownV2' });
+
     return true;
   } catch (err) {
     console.error('Download error:', err);
     return false;
+  } finally {
+    if (tmpAudioPath && fs.existsSync(tmpAudioPath)) fs.unlinkSync(tmpAudioPath);
+    if (tmpImgPath && fs.existsSync(tmpImgPath)) fs.unlinkSync(tmpImgPath);
+    if (tmpOutPath && fs.existsSync(tmpOutPath)) fs.unlinkSync(tmpOutPath);
   }
 }
 
