@@ -157,7 +157,21 @@ async function renderSearch(
   quality: Quality,
   messageId?: number
 ) {
-  const url = `${BASE_API}/${type}s?q=${encodeURIComponent(query)}&page=${page}`;
+  let saavnQuery = query;
+
+  if (type === 'song' && page === 1 && query.split(' ').length <= 2) {
+    try {
+      const itunes = await axios.get(`https://itunes.apple.com/search?term=${encodeURIComponent(query)}&entity=song&limit=1`);
+      if (itunes.data?.results?.length > 0) {
+        const item = itunes.data.results[0];
+        saavnQuery = `${item.artistName} ${item.trackName}`;
+      }
+    } catch (e) {
+      console.error('iTunes API error:', e);
+    }
+  }
+
+  const url = `${BASE_API}/${type}s?q=${encodeURIComponent(saavnQuery)}&page=${page}`;
   
   try {
     const resp = await axios.get(url);
@@ -613,16 +627,6 @@ bot.on('message:text', async (ctx) => {
       }
     } catch (e) {
       console.error('Link parse error:', e);
-    }
-  } else if (query.split(' ').length <= 2) {
-    try {
-      const itunes = await axios.get(`https://itunes.apple.com/search?term=${encodeURIComponent(query)}&entity=song&limit=1`);
-      if (itunes.data?.results?.length > 0) {
-        const item = itunes.data.results[0];
-        query = `${item.artistName} ${item.trackName}`;
-      }
-    } catch (e) {
-      console.error('iTunes API error:', e);
     }
   }
 
