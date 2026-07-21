@@ -134,7 +134,7 @@ async function downloadAndSendAudio(ctx: any, permaUrl: string, quality: Quality
     await execFilePromise('ffmpeg', args);
 
     const inputFile = new InputFile(tmpOutPath, `${title}.m4a`);
-    await ctx.replyWithAudio(inputFile, { title, performer, duration, thumbnail: thumbUrl, caption, parse_mode: 'MarkdownV2' });
+    await ctx.replyWithAudio(inputFile, { title, performer, duration, caption, parse_mode: 'MarkdownV2' });
 
     return true;
   } catch (err) {
