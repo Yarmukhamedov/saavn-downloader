@@ -1056,55 +1056,79 @@ bot.on('message:text', async (ctx) => {
         let songArtist = '';
 
         if (text.includes('spotify.com')) {
-          const spotifyMatch = text.match(/track\/([a-zA-Z0-9]+)/);
-          if (spotifyMatch) {
-            const trackId = spotifyMatch[1];
+          // Primary Method: Fetch Spotify page with TelegramBot User-Agent (Spotify's official crawler whitelist!)
+          try {
+            const res = await axios.get(text, {
+              headers: {
+                'User-Agent': 'TelegramBot (like TwitterBot)',
+                'Accept-Language': 'en-US,en;q=0.9'
+              }
+            }).catch(() => null);
 
-            // 1. Fetch Spotify Embed HTML (__NEXT_DATA__ & Regex)
-            try {
-              const fetchUrl = `https://open.spotify.com/embed/track/${trackId}`;
-              const res = await axios.get(fetchUrl, {
-                headers: {
-                  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                  'Accept-Language': 'en-US,en;q=0.9'
-                }
-              }).catch(() => null);
+            if (res?.data) {
+              const html = res.data;
+              const ogTitle = html.match(/<meta[^>]*property=["'](?:og|twitter):title["'][^>]*content=["'](.*?)["']/i) ||
+                              html.match(/<meta[^>]*content=["'](.*?)["'][^>]*property=["'](?:og|twitter):title["']/i);
+              const ogDesc = html.match(/<meta[^>]*property=["'](?:og|twitter):description["'][^>]*content=["'](.*?)["']/i) ||
+                             html.match(/<meta[^>]*content=["'](.*?)["'][^>]*property=["'](?:og|twitter):description["']/i);
 
-              if (res?.data) {
-                const html = res.data;
-                const match = html.match(/<script id="__NEXT_DATA__" type="application\/json">(.*?)<\/script>/);
-                if (match && match[1]) {
-                  try {
-                    const data = JSON.parse(match[1]);
-                    const entity = data?.props?.pageProps?.state?.data?.entity;
-                    songTitle = entity?.name || entity?.title || '';
-                    if (entity?.artists?.length > 0) {
-                      songArtist = entity.artists.map((a: any) => a.name).join(', ');
-                    }
-                  } catch (e) {}
-                }
+              if (ogTitle && ogTitle[1]) {
+                songTitle = ogTitle[1];
+              }
 
-                if (!songTitle) {
-                  const titleMatch = html.match(/"title"\s*:\s*"([^"]+)"/) || html.match(/"name"\s*:\s*"([^"]+)"/);
-                  if (titleMatch) songTitle = titleMatch[1];
-                }
-
-                if (!songArtist) {
-                  const artistMatch = html.match(/"artists"\s*:\s*\[\s*\{\s*"name"\s*:\s*"([^"]+)"/);
-                  if (artistMatch) songArtist = artistMatch[1];
+              if (ogDesc && ogDesc[1]) {
+                const desc = ogDesc[1];
+                const parts = desc.split('·').map((p: string) => p.trim());
+                if (parts.length >= 2) {
+                  songArtist = parts[0];
+                  if (!songTitle || songTitle.toLowerCase().includes('spotify')) {
+                    songTitle = parts[1];
+                  }
                 }
               }
-            } catch (e) {}
+            }
+          } catch (e) {}
 
-            // 2. Fallback to Spotify oEmbed API if title is still missing
-            if (!songTitle) {
+          // Secondary Fallback: Spotify Embed HTML __NEXT_DATA__ & Regex
+          if (!songTitle || !songArtist) {
+            const spotifyMatch = text.match(/track\/([a-zA-Z0-9]+)/);
+            if (spotifyMatch) {
+              const trackId = spotifyMatch[1];
               try {
-                const oembed = await axios.get(`https://open.spotify.com/oembed?url=${encodeURIComponent('https://open.spotify.com/track/' + trackId)}`).catch(() => null);
-                if (oembed?.data?.title) {
-                  songTitle = oembed.data.title;
-                  if (oembed.data.author_name) songArtist = oembed.data.author_name;
+                const fetchUrl = `https://open.spotify.com/embed/track/${trackId}`;
+                const res = await axios.get(fetchUrl, {
+                  headers: {
+                    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Accept-Language': 'en-US,en;q=0.9'
+                  }
+                }).catch(() => null);
+
+                if (res?.data) {
+                  const html = res.data;
+                  const match = html.match(/<script id="__NEXT_DATA__" type="application\/json">(.*?)<\/script>/);
+                  if (match && match[1]) {
+                    try {
+                      const data = JSON.parse(match[1]);
+                      const entity = data?.props?.pageProps?.state?.data?.entity;
+                      if (!songTitle) songTitle = entity?.name || entity?.title || '';
+                      if (!songArtist && entity?.artists?.length > 0) {
+                        songArtist = entity.artists.map((a: any) => a.name).join(', ');
+                      }
+                    } catch (e) {}
+                  }
                 }
               } catch (e) {}
+
+              // Tertiary Fallback: Spotify oEmbed API
+              if (!songTitle) {
+                try {
+                  const oembed = await axios.get(`https://open.spotify.com/oembed?url=${encodeURIComponent('https://open.spotify.com/track/' + trackId)}`).catch(() => null);
+                  if (oembed?.data?.title) {
+                    songTitle = oembed.data.title;
+                    if (oembed.data.author_name) songArtist = oembed.data.author_name;
+                  }
+                } catch (e) {}
+              }
             }
           }
         } else if (text.includes('music.apple.com')) {
