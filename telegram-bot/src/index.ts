@@ -124,6 +124,58 @@ function buildQualityKeyboard(current: Quality, lang: Language = 'uz'): InlineKe
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+function dedupeAlbums(albums: any[]): any[] {
+  const seen = new Set<string>();
+  return albums.filter((a) => {
+    if (!a) return false;
+    const rawTitle = (a.title || a.name || '').toLowerCase().replace(/[\s\-_]+/g, '');
+    if (!rawTitle) return false;
+    if (seen.has(rawTitle)) return false;
+    seen.add(rawTitle);
+    return true;
+  });
+}
+
+async function fetchArtistData(tokenOrName: string): Promise<any> {
+  let artist: any = null;
+
+  try {
+    const resp = await axios.get(`${BASE_API}/artist?token=${encodeURIComponent(tokenOrName)}`);
+    if (resp.data && (resp.data.name || resp.data.id) && !resp.data.error) {
+      artist = resp.data;
+    }
+  } catch (e) {}
+
+  if (!artist || !artist.name) {
+    try {
+      const songResp = await axios.get(`${BASE_API}/songs?q=${encodeURIComponent(tokenOrName)}&limit=5`).catch(() => null);
+      if (songResp && songResp.data?.results?.length > 0) {
+        for (const song of songResp.data.results) {
+          const primaryArtists = [
+            ...(song.more_info?.artists?.primary || []),
+            ...(song.artists?.primary || [])
+          ];
+          const matched = primaryArtists.find((a: any) => extractArtistToken(a)) || primaryArtists[0];
+          const realToken = extractArtistToken(matched);
+          if (realToken && realToken !== tokenOrName) {
+            const resp2 = await axios.get(`${BASE_API}/artist?token=${encodeURIComponent(realToken)}`).catch(() => null);
+            if (resp2 && resp2.data && resp2.data.name) {
+              artist = resp2.data;
+              break;
+            }
+          }
+        }
+      }
+    } catch (e) {}
+  }
+
+  if (!artist || !artist.name) {
+    artist = { name: tokenOrName, topAlbums: [], singles: [], topSongs: [] };
+  }
+
+  return artist;
+}
+
 function extractArtistToken(a: any): string {
   if (!a) return '';
   if (a.artist_token) return a.artist_token;
@@ -647,8 +699,7 @@ bot.on('callback_query:data', async (ctx) => {
     await ctx.answerCallbackQuery().catch(() => {});
     
     try {
-      const resp = await axios.get(`${BASE_API}/artist?token=${token}`);
-      const artist = resp.data;
+      const artist = await fetchArtistData(token);
       if (!artist || !artist.name) {
         await ctx.editMessageText(t(lang, 'noArtistFound'), { parse_mode: 'MarkdownV2' }).catch(() => {});
         return;
@@ -696,8 +747,7 @@ bot.on('callback_query:data', async (ctx) => {
     await ctx.answerCallbackQuery().catch(() => {});
     
     try {
-      const resp = await axios.get(`${BASE_API}/artist?token=${token}`);
-      const artist = resp.data;
+      const artist = await fetchArtistData(token);
       if (!artist || !artist.name) {
         await editOrReplaceText(ctx, t(lang, 'noSongsFound'), { parse_mode: 'MarkdownV2' });
         return;
@@ -789,8 +839,7 @@ bot.on('callback_query:data', async (ctx) => {
     await ctx.answerCallbackQuery().catch(() => {});
     
     try {
-      const resp = await axios.get(`${BASE_API}/artist?token=${token}`);
-      const artist = resp.data;
+      const artist = await fetchArtistData(token);
 
       // Also search albums by artist name (via JioSaavn & iTunes API) to include collab & featured albums
       let searchAlbums: any[] = [];
@@ -836,7 +885,7 @@ bot.on('callback_query:data', async (ctx) => {
         ...searchAlbums
       ];
       
-      const uniqueAlbums = dedupeByKeys(allAlbums);
+      const uniqueAlbums = dedupeAlbums(allAlbums);
       
       if (!uniqueAlbums || uniqueAlbums.length === 0) {
         await editOrReplaceText(ctx, t(lang, 'noAlbumsFound'), { parse_mode: 'MarkdownV2' });
