@@ -216,8 +216,9 @@ function isItemByArtist(item: any, targetArtist: any): boolean {
     if (aName && targetVariants.includes(aName)) return true;
   }
 
-  // 2. Extract all raw artist text fields from JioSaavn item
+  // 2. Extract all raw artist text fields from JioSaavn and iTunes items
   const rawFields = [
+    item.artistName,
     item.primary_artists,
     item.subtitle,
     item.header_desc,
