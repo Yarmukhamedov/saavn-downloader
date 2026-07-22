@@ -765,13 +765,10 @@ bot.on('callback_query:data', async (ctx) => {
     let page = 1;
     let token = payload;
 
-    const firstUnderscore = payload.indexOf('_');
-    if (firstUnderscore !== -1) {
-      const parsedPage = parseInt(payload.slice(0, firstUnderscore), 10);
-      if (!isNaN(parsedPage)) {
-        page = parsedPage;
-        token = payload.slice(firstUnderscore + 1);
-      }
+    const pageMatch = payload.match(/^(\d+)_(.+)$/);
+    if (pageMatch) {
+      page = parseInt(pageMatch[1], 10);
+      token = pageMatch[2];
     }
 
     await ctx.answerCallbackQuery().catch(() => {});
