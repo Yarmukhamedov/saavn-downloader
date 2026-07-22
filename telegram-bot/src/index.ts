@@ -688,23 +688,41 @@ bot.on('callback_query:data', async (ctx) => {
         return;
       }
 
-      // Also search songs by artist name (with variations) to include collabs & featured tracks
+      // Also search songs by artist name (via JioSaavn & iTunes API) to include collabs & featured tracks
       let searchSongs: any[] = [];
       if (artist && artist.name) {
         const cleanName = artist.name.replace(/['‘’`]/g, '');
         const spaceName = artist.name.replace(/['‘’`]/g, ' ');
 
         const queries = Array.from(new Set([artist.name, cleanName, spaceName].filter(Boolean)));
-        const resps = await Promise.all(
+        const saavnResps = await Promise.all(
           queries.map((q) => axios.get(`${BASE_API}/songs?q=${encodeURIComponent(q)}&limit=50`).catch(() => null))
         );
 
-        for (const r of resps) {
+        for (const r of saavnResps) {
           if (r && r.data?.results) {
             const valid = r.data.results.filter((song: any) => isItemByArtist(song, artist));
             searchSongs.push(...valid);
           }
         }
+
+        // Query iTunes API for missing top tracks
+        try {
+          const itResp = await axios.get(`https://itunes.apple.com/search?term=${encodeURIComponent(artist.name)}&entity=song&limit=25`).catch(() => null);
+          const itSongs = (itResp?.data?.results || []).filter((s: any) => isItemByArtist(s, artist));
+          if (itSongs.length > 0) {
+            const itPromises = itSongs.slice(0, 15).map((it: any) =>
+              axios.get(`${BASE_API}/songs?q=${encodeURIComponent(it.trackName + ' ' + artist.name)}&limit=5`).catch(() => null)
+            );
+            const saavnMatchResps = await Promise.all(itPromises);
+            for (const r of saavnMatchResps) {
+              if (r && r.data?.results) {
+                const valid = r.data.results.filter((song: any) => isItemByArtist(song, artist));
+                searchSongs.push(...valid);
+              }
+            }
+          }
+        } catch (e) {}
       }
 
       const combinedSongs = [
@@ -762,23 +780,41 @@ bot.on('callback_query:data', async (ctx) => {
       const resp = await axios.get(`${BASE_API}/artist?token=${token}`);
       const artist = resp.data;
 
-      // Also search albums by artist name (with variations) to include collab & featured albums
+      // Also search albums by artist name (via JioSaavn & iTunes API) to include collab & featured albums
       let searchAlbums: any[] = [];
       if (artist && artist.name) {
         const cleanName = artist.name.replace(/['‘’`]/g, '');
         const spaceName = artist.name.replace(/['‘’`]/g, ' ');
 
         const queries = Array.from(new Set([artist.name, cleanName, spaceName].filter(Boolean)));
-        const resps = await Promise.all(
+        const saavnResps = await Promise.all(
           queries.map((q) => axios.get(`${BASE_API}/albums?q=${encodeURIComponent(q)}&limit=50`).catch(() => null))
         );
 
-        for (const r of resps) {
+        for (const r of saavnResps) {
           if (r && r.data?.results) {
             const valid = r.data.results.filter((album: any) => isItemByArtist(album, artist));
             searchAlbums.push(...valid);
           }
         }
+
+        // Query iTunes API for missing albums (like Ming Afsus) and match them on JioSaavn
+        try {
+          const itResp = await axios.get(`https://itunes.apple.com/search?term=${encodeURIComponent(artist.name)}&entity=album&limit=50`).catch(() => null);
+          const itAlbums = (itResp?.data?.results || []).filter((a: any) => isItemByArtist(a, artist));
+          if (itAlbums.length > 0) {
+            const saavnPromises = itAlbums.map((it: any) =>
+              axios.get(`${BASE_API}/albums?q=${encodeURIComponent(it.collectionName)}&limit=5`).catch(() => null)
+            );
+            const saavnMatchResps = await Promise.all(saavnPromises);
+            for (const r of saavnMatchResps) {
+              if (r && r.data?.results) {
+                const valid = r.data.results.filter((album: any) => isItemByArtist(album, artist));
+                searchAlbums.push(...valid);
+              }
+            }
+          }
+        } catch (e) {}
       }
       
       const allAlbums = [
