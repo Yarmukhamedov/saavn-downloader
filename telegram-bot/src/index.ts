@@ -1058,24 +1058,51 @@ bot.on('message:text', async (ctx) => {
         if (text.includes('spotify.com')) {
           const spotifyMatch = text.match(/track\/([a-zA-Z0-9]+)/);
           if (spotifyMatch) {
-            const fetchUrl = `https://open.spotify.com/embed/track/${spotifyMatch[1]}`;
-            const res = await axios.get(fetchUrl, {
-              headers: {
-                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept-Language': 'en-US,en;q=0.9'
-              }
-            }).catch(() => null);
+            const trackId = spotifyMatch[1];
 
-            if (res?.data) {
-              const match = res.data.match(/<script id="__NEXT_DATA__" type="application\/json">(.*?)<\/script>/);
-              if (match && match[1]) {
-                try {
-                  const data = JSON.parse(match[1]);
-                  const entity = data?.props?.pageProps?.state?.data?.entity;
-                  songTitle = entity?.name || entity?.title || '';
-                  songArtist = entity?.artists?.map((a: any) => a.name).join(', ') || '';
-                } catch (e) {}
+            // Stage 1: Official Spotify oEmbed API (No scraping / IP blocking)
+            try {
+              const oembed = await axios.get(`https://open.spotify.com/oembed?url=${encodeURIComponent('https://open.spotify.com/track/' + trackId)}`).catch(() => null);
+              if (oembed?.data?.title) {
+                songTitle = oembed.data.title;
+                if (oembed.data.author_name) songArtist = oembed.data.author_name;
               }
+            } catch (e) {}
+
+            // Stage 2: Spotify Embed HTML __NEXT_DATA__
+            if (!songTitle || !songArtist) {
+              try {
+                const fetchUrl = `https://open.spotify.com/embed/track/${trackId}`;
+                const res = await axios.get(fetchUrl, {
+                  headers: {
+                    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Accept-Language': 'en-US,en;q=0.9'
+                  }
+                }).catch(() => null);
+
+                if (res?.data) {
+                  const match = res.data.match(/<script id="__NEXT_DATA__" type="application\/json">(.*?)<\/script>/);
+                  if (match && match[1]) {
+                    const data = JSON.parse(match[1]);
+                    const entity = data?.props?.pageProps?.state?.data?.entity;
+                    if (!songTitle) songTitle = entity?.name || entity?.title || '';
+                    if (!songArtist) songArtist = entity?.artists?.map((a: any) => a.name).join(', ') || '';
+                  }
+                }
+              } catch (e) {}
+            }
+
+            // Stage 3: iTunes Search API fallback for artist if missing
+            if (songTitle && !songArtist) {
+              try {
+                const itResp = await axios.get(`https://itunes.apple.com/search?term=${encodeURIComponent(songTitle)}&entity=song&limit=5`).catch(() => null);
+                if (itResp && itResp.data?.results?.length > 0) {
+                  const match = itResp.data.results.find((s: any) => s.trackName.toLowerCase() === songTitle.toLowerCase()) || itResp.data.results[0];
+                  if (match?.artistName) {
+                    songArtist = match.artistName;
+                  }
+                }
+              } catch (e) {}
             }
           }
         } else if (text.includes('music.apple.com')) {
@@ -1089,6 +1116,7 @@ bot.on('message:text', async (ctx) => {
           } catch (e) {}
         }
 
+        // Stage 4: JioSaavn Resolution
         if (songTitle) {
           const q1 = songArtist ? `${songArtist} ${songTitle}` : songTitle;
           let searchResp = await axios.get(`${BASE_API}/songs?q=${encodeURIComponent(q1)}`).catch(() => null);
