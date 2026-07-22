@@ -188,11 +188,20 @@ async function renderSearch(
   messageId?: number
 ) {
   let saavnQuery = query;
+  const cleanQuery = query.replace(/['`‘’ʻʼ]/g, '').trim();
+  const spaceQuery = query.replace(/['`‘’ʻʼ\-]/g, ' ').replace(/\s+/g, ' ').trim();
 
-  if (type === 'song' && page === 1 && query.split(' ').length <= 2) {
+  if (type === 'song' && page === 1 && query.split(' ').length <= 4) {
     try {
-      const itunes = await axios.get(`https://itunes.apple.com/search?term=${encodeURIComponent(query)}&entity=song&limit=1`);
-      if (itunes.data?.results?.length > 0) {
+      let itunes = await axios.get(`https://itunes.apple.com/search?term=${encodeURIComponent(query)}&entity=song&limit=1`).catch(() => null);
+      if (!itunes?.data?.results?.length && cleanQuery !== query) {
+        itunes = await axios.get(`https://itunes.apple.com/search?term=${encodeURIComponent(cleanQuery)}&entity=song&limit=1`).catch(() => null);
+      }
+      if (!itunes?.data?.results?.length && spaceQuery !== query && spaceQuery !== cleanQuery) {
+        itunes = await axios.get(`https://itunes.apple.com/search?term=${encodeURIComponent(spaceQuery)}&entity=song&limit=1`).catch(() => null);
+      }
+
+      if (itunes && itunes.data?.results?.length > 0) {
         const item = itunes.data.results[0];
         saavnQuery = `${item.artistName} ${item.trackName}`;
       }
@@ -210,13 +219,13 @@ async function renderSearch(
     // find the top song for this artist and extract the actual artist object.
     if (type === 'artist' && page === 1 && query.split(' ').length <= 2) {
       try {
-        const itunes = await axios.get(`https://itunes.apple.com/search?term=${encodeURIComponent(query)}&entity=song&limit=1`);
-        if (itunes.data?.results?.length > 0) {
+        const itunes = await axios.get(`https://itunes.apple.com/search?term=${encodeURIComponent(query)}&entity=song&limit=1`).catch(() => null);
+        if (itunes && itunes.data?.results?.length > 0) {
           const item = itunes.data.results[0];
           const smartSongQuery = `${item.artistName} ${item.trackName}`;
           
-          const songResp = await axios.get(`${BASE_API}/songs?q=${encodeURIComponent(smartSongQuery)}&limit=1`);
-          if (songResp.data?.results?.length > 0) {
+          const songResp = await axios.get(`${BASE_API}/songs?q=${encodeURIComponent(smartSongQuery)}&limit=1`).catch(() => null);
+          if (songResp && songResp.data?.results?.length > 0) {
             const song = songResp.data.results[0];
             const primaryArtists = song.more_info?.artists?.primary || [];
             
@@ -244,13 +253,13 @@ async function renderSearch(
     // find top album via iTunes API, and fetch that specific album from JioSaavn.
     if (type === 'album' && page === 1 && query.split(' ').length <= 2) {
       try {
-        const itunes = await axios.get(`https://itunes.apple.com/search?term=${encodeURIComponent(query)}&entity=album&limit=1`);
-        if (itunes.data?.results?.length > 0) {
+        const itunes = await axios.get(`https://itunes.apple.com/search?term=${encodeURIComponent(query)}&entity=album&limit=1`).catch(() => null);
+        if (itunes && itunes.data?.results?.length > 0) {
           const item = itunes.data.results[0];
           const smartAlbumQuery = `${item.artistName} ${item.collectionName}`;
           
-          const albumResp = await axios.get(`${BASE_API}/albums?q=${encodeURIComponent(smartAlbumQuery)}&limit=1`);
-          if (albumResp.data?.results?.length > 0) {
+          const albumResp = await axios.get(`${BASE_API}/albums?q=${encodeURIComponent(smartAlbumQuery)}&limit=1`).catch(() => null);
+          if (albumResp && albumResp.data?.results?.length > 0) {
             results.push(albumResp.data.results[0]);
           }
         }
@@ -259,8 +268,26 @@ async function renderSearch(
       }
     }
 
-    const resp = await axios.get(url);
-    const apiResults = resp.data?.results || [];
+    let resp: any = await axios.get(url).catch(() => null);
+    let apiResults = resp?.data?.results || [];
+
+    // Fallback 1: Try cleanQuery (without apostrophes: "Manzilsiz yollar")
+    if ((!apiResults || apiResults.length === 0) && cleanQuery !== saavnQuery) {
+      resp = await axios.get(`${BASE_API}/${type}s?q=${encodeURIComponent(cleanQuery)}&limit=50`).catch(() => null);
+      if (resp && resp.data?.results?.length > 0) apiResults = resp.data.results;
+    }
+
+    // Fallback 2: Try spaceQuery (apostrophes & dashes replaced with spaces: "Manzilsiz yo llar")
+    if ((!apiResults || apiResults.length === 0) && spaceQuery !== saavnQuery && spaceQuery !== cleanQuery) {
+      resp = await axios.get(`${BASE_API}/${type}s?q=${encodeURIComponent(spaceQuery)}&limit=50`).catch(() => null);
+      if (resp && resp.data?.results?.length > 0) apiResults = resp.data.results;
+    }
+
+    // Fallback 3: If saavnQuery was augmented to artist+track, fallback to original query
+    if ((!apiResults || apiResults.length === 0) && query !== saavnQuery && query !== cleanQuery && query !== spaceQuery) {
+      resp = await axios.get(`${BASE_API}/${type}s?q=${encodeURIComponent(query)}&limit=50`).catch(() => null);
+      if (resp && resp.data?.results?.length > 0) apiResults = resp.data.results;
+    }
 
     results = dedupeByKeys([...results, ...apiResults]);
 
