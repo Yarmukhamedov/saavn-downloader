@@ -8,7 +8,7 @@ export const LANG_NAMES: Record<Language, string> = {
 
 export const translations = {
   uz: {
-    welcome: `🎧 *JioSaavn Music Downloader Bot*\\!\n\nMenga qo'shiq nomini yozing yoki JioSaavn, Spotify, Apple Music havolasini yuboring\\.\n\n*Buyruqlar:*\n• /language — tilni o'zgartirish\n• /quality — musiqa sifatini sozlash\n\n*Misollar:*\n• \`Blinding Lights\`\n• \`Zohid - Manzilsiz yo'llar\`\n• \`https://open.spotify.com/track/...\``,
+    welcome: `🎧 *JioSaavn Music Downloader Bot*\\!\n\nMenga qo'shiq nomini yozing yoki JioSaavn havolasini yuboring\\.\n\n*Buyruqlar:*\n• /language — tilni o'zgartirish\n• /quality — musiqa sifatini sozlash\n\n*Misollar:*\n• \`Blinding Lights\`\n• \`Zohid - Manzilsiz yo'llar\`\n• \`https://www.jiosaavn.com/song/...\``,
     langTitle: `🌐 *Tilni tanlang / Выберите язык / Select Language*`,
     langSaved: `✅ Til o'zgartirildi: *O'zbekcha*`,
     qualityTitle: `🎚 *Musiqa sifatini tanlang*\nHozirgi sifat:`,
@@ -45,7 +45,7 @@ export const translations = {
     searchExpired: `⚠️ Qidiruv eskirgan. Qayta qidiring.`
   },
   ru: {
-    welcome: `🎧 *JioSaavn Music Downloader Bot*\\!\n\nОтправьте название песни или ссылку JioSaavn, Spotify, Apple Music\\.\n\n*Команды:*\n• /language — сменить язык\n• /quality — настроить качество музыки\n\n*Примеры:*\n• \`Blinding Lights\`\n• \`Zohid - Manzilsiz yo'llar\`\n• \`https://open.spotify.com/track/...\``,
+    welcome: `🎧 *JioSaavn Music Downloader Bot*\\!\n\nОтправьте название песни или ссылку JioSaavn\\.\n\n*Команды:*\n• /language — сменить язык\n• /quality — настроить качество музыки\n\n*Примеры:*\n• \`Blinding Lights\`\n• \`Zohid - Manzilsiz yo'llar\`\n• \`https://www.jiosaavn.com/song/...\``,
     langTitle: `🌐 *Выберите язык / Select Language / Tilni tanlang*`,
     langSaved: `✅ Язык изменен: *Русский*`,
     qualityTitle: `🎚 *Выберите качество музыки*\nТекущее качество:`,
@@ -82,7 +82,7 @@ export const translations = {
     searchExpired: `⚠️ Поиск устарел. Введите запрос заново.`
   },
   en: {
-    welcome: `🎧 *JioSaavn Music Downloader Bot*\\!\n\nSend a song title or JioSaavn, Spotify, Apple Music link\\.\n\n*Commands:*\n• /language — change language\n• /quality — set audio quality\n\n*Examples:*\n• \`Blinding Lights\`\n• \`Zohid - Manzilsiz yo'llar\`\n• \`https://open.spotify.com/track/...\``,
+    welcome: `🎧 *JioSaavn Music Downloader Bot*\\!\n\nSend a song title or JioSaavn link\\.\n\n*Commands:*\n• /language — change language\n• /quality — set audio quality\n\n*Examples:*\n• \`Blinding Lights\`\n• \`Zohid - Manzilsiz yo'llar\`\n• \`https://www.jiosaavn.com/song/...\``,
     langTitle: `🌐 *Select Language / Выберите язык / Tilni tanlang*`,
     langSaved: `✅ Language changed: *English*`,
     qualityTitle: `🎚 *Select Audio Quality*\nCurrent quality:`,
