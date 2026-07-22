@@ -367,18 +367,14 @@ async function renderSearch(
       });
     }
 
-    // Row 1: Pagination
-    let hasPaginationRow = false;
-    if (currentPage > 1) {
-      keyboard.text(t(lang, 'prev'), `sp_${searchId}_${type}_${currentPage - 1}`);
-      hasPaginationRow = true;
-    }
-    if (currentPage < totalPages) {
-      keyboard.text(t(lang, 'next'), `sp_${searchId}_${type}_${currentPage + 1}`);
-      hasPaginationRow = true;
-    }
-    if (hasPaginationRow) {
-      keyboard.row();
+    // Row 1: Pagination (Side by side Back & Next)
+    if (totalPages > 1) {
+      const prevPage = currentPage > 1 ? currentPage - 1 : totalPages;
+      const nextPage = currentPage < totalPages ? currentPage + 1 : 1;
+      keyboard
+        .text(t(lang, 'prev'), `sp_${searchId}_${type}_${prevPage}`)
+        .text(t(lang, 'next'), `sp_${searchId}_${type}_${nextPage}`)
+        .row();
     }
 
     // Row 2: Filters (All 3 in 1 single row with 🔹 active indicator)
@@ -664,18 +660,14 @@ bot.on('callback_query:data', async (ctx) => {
         keyboard.text(`${itemNumber}. ${title.slice(0, 48)}`, `al_${album.token}`).row();
       });
 
-      // Pagination controls
-      let hasPaginationRow = false;
-      if (currentPage > 1) {
-        keyboard.text(t(lang, 'prev'), `aralb_${currentPage - 1}_${token}`);
-        hasPaginationRow = true;
-      }
-      if (currentPage < totalPages) {
-        keyboard.text(t(lang, 'next'), `aralb_${currentPage + 1}_${token}`);
-        hasPaginationRow = true;
-      }
-      if (hasPaginationRow) {
-        keyboard.row();
+      // Pagination controls (Side by side Back & Next)
+      if (totalPages > 1) {
+        const prevPage = currentPage > 1 ? currentPage - 1 : totalPages;
+        const nextPage = currentPage < totalPages ? currentPage + 1 : 1;
+        keyboard
+          .text(t(lang, 'prev'), `aralb_${prevPage}_${token}`)
+          .text(t(lang, 'next'), `aralb_${nextPage}_${token}`)
+          .row();
       }
 
       // Back to Artist Profile & Close
