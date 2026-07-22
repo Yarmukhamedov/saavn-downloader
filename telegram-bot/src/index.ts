@@ -319,7 +319,7 @@ async function renderSearch(
         const cacheId = cacheSong(song.perma_url || song.track_url);
         const btnText = artist ? `${artist} - ${title}` : title;
         const itemNumber = startIndex + index + 1;
-        keyboard.text(`🎵 ${itemNumber}. ${btnText.slice(0, 45)}`, `dl_${cacheId}`).row();
+        keyboard.text(`${itemNumber}. ${btnText.slice(0, 48)}`, `dl_${cacheId}`).row();
       });
     } else if (type === 'album') {
       topResults.forEach((album: any, index: number) => {
@@ -327,31 +327,39 @@ async function renderSearch(
         const subtitle = album.subtitle || '';
         const btnText = subtitle ? `${title} - ${subtitle}` : title;
         const itemNumber = startIndex + index + 1;
-        keyboard.text(`💿 ${itemNumber}. ${btnText.slice(0, 45)}`, `al_${album.token}`).row();
+        keyboard.text(`${itemNumber}. ${btnText.slice(0, 48)}`, `al_${album.token}`).row();
       });
     } else if (type === 'artist') {
       topResults.forEach((artist: any, index: number) => {
         const name = artist.name || 'Artist';
         const itemNumber = startIndex + index + 1;
-        keyboard.text(`👤 ${itemNumber}. ${name.slice(0, 45)}`, `ar_${artist.token}`).row();
+        keyboard.text(`${itemNumber}. ${name.slice(0, 48)}`, `ar_${artist.token}`).row();
       });
     }
 
     // Row 1: Pagination
+    let hasPaginationRow = false;
     if (currentPage > 1) {
       keyboard.text('⬅️ Orqaga', `sp_${searchId}_${type}_${currentPage - 1}`);
+      hasPaginationRow = true;
     }
-    keyboard.text('❌ Yopish', 'close_msg');
     if (currentPage < totalPages) {
       keyboard.text('Oldinga ➡️', `sp_${searchId}_${type}_${currentPage + 1}`);
+      hasPaginationRow = true;
     }
-    keyboard.row();
+    if (hasPaginationRow) {
+      keyboard.row();
+    }
 
-    // Row 2: Filters
-    if (type !== 'song') keyboard.text('🎵 Qo\'shiqlar', `sp_${searchId}_song_1`);
-    if (type !== 'album') keyboard.text('💿 Albomlar', `sp_${searchId}_album_1`);
-    if (type !== 'artist') keyboard.text('👤 Xonandalar', `sp_${searchId}_artist_1`);
-    keyboard.row();
+    // Row 2: Filters (All 3 in 1 single row with 🔹 active indicator)
+    keyboard
+      .text(type === 'song' ? '🔹 Qo\'shiqlar' : 'Qo\'shiqlar', `sp_${searchId}_song_1`)
+      .text(type === 'album' ? '🔹 Albomlar' : 'Albomlar', `sp_${searchId}_album_1`)
+      .text(type === 'artist' ? '🔹 Xonandalar' : 'Xonandalar', `sp_${searchId}_artist_1`)
+      .row();
+
+    // Row 3: Close (Very bottom row)
+    keyboard.text('Yopish', 'close_msg').row();
 
     if (messageId) {
       await ctx.api.editMessageText(ctx.chat.id, messageId, msgText, {
@@ -472,11 +480,11 @@ bot.on('callback_query:data', async (ctx) => {
         const dur = formatDuration(song.more_info?.duration || song.duration);
         msgText += `${index + 1}\\. ${escapeMd(title)} \\(${dur}\\)\n`;
         const cacheId = cacheSong(song.perma_url || song.track_url);
-        keyboard.text(`🎵 ${index + 1}. ${title.slice(0, 45)}`, `dl_${cacheId}`).row();
+        keyboard.text(`${index + 1}. ${title.slice(0, 48)}`, `dl_${cacheId}`).row();
       });
       
       keyboard.text('📥 Hammasini yuklab olish', `dla_${token}`).row();
-      keyboard.text('❌ Yopish', 'close_msg');
+      keyboard.text('Yopish', 'close_msg').row();
       
       await ctx.editMessageText(msgText, { parse_mode: 'MarkdownV2', reply_markup: keyboard }).catch(() => {});
     } catch (err) {
@@ -503,9 +511,9 @@ bot.on('callback_query:data', async (ctx) => {
       const keyboard = new InlineKeyboard();
       const msgText = `👤 *${escapeMd(artist.name)}*\n\nMa'lumotlarni tanlang:`;
       
-      keyboard.text('🔥 TOP 10', `artop_${token}`).row();
-      keyboard.text('💿 Albomlar', `aralb_${token}`).row();
-      keyboard.text('❌ Yopish', 'close_msg');
+      keyboard.text('TOP 10', `artop_${token}`).row();
+      keyboard.text('Albomlar', `aralb_${token}`).row();
+      keyboard.text('Yopish', 'close_msg').row();
       
       await ctx.editMessageText(msgText, { parse_mode: 'MarkdownV2', reply_markup: keyboard }).catch(() => {});
     } catch (err) {
@@ -538,11 +546,11 @@ bot.on('callback_query:data', async (ctx) => {
         const dur = formatDuration(song.duration || song.more_info?.duration);
         msgText += `${index + 1}\\. ${escapeMd(title)} \\(${dur}\\)\n`;
         const cacheId = cacheSong(song.perma_url || song.track_url);
-        keyboard.text(`🎵 ${index + 1}. ${title.slice(0, 45)}`, `dl_${cacheId}`).row();
+        keyboard.text(`${index + 1}. ${title.slice(0, 48)}`, `dl_${cacheId}`).row();
       });
       
       keyboard.text('⬅️ Orqaga', `ar_${token}`).row();
-      keyboard.text('❌ Yopish', 'close_msg');
+      keyboard.text('Yopish', 'close_msg').row();
       
       await ctx.editMessageText(msgText, { parse_mode: 'MarkdownV2', reply_markup: keyboard }).catch(() => {});
     } catch (err) {
@@ -601,21 +609,26 @@ bot.on('callback_query:data', async (ctx) => {
       pageAlbums.forEach((album: any, index: number) => {
         const title = album.title || 'Album';
         const itemNumber = startIndex + index + 1;
-        keyboard.text(`💿 ${itemNumber}. ${title.slice(0, 42)}`, `al_${album.token}`).row();
+        keyboard.text(`${itemNumber}. ${title.slice(0, 48)}`, `al_${album.token}`).row();
       });
 
       // Pagination controls
+      let hasPaginationRow = false;
       if (currentPage > 1) {
         keyboard.text('⬅️ Orqaga', `aralb_${currentPage - 1}_${token}`);
+        hasPaginationRow = true;
       }
-      keyboard.text('❌ Yopish', 'close_msg');
       if (currentPage < totalPages) {
         keyboard.text('Oldinga ➡️', `aralb_${currentPage + 1}_${token}`);
+        hasPaginationRow = true;
       }
-      keyboard.row();
+      if (hasPaginationRow) {
+        keyboard.row();
+      }
 
       // Back to Artist Profile
       keyboard.text('🔙 Xonanda sahifasiga', `ar_${token}`).row();
+      keyboard.text('Yopish', 'close_msg').row();
       
       await ctx.editMessageText(msgText, { parse_mode: 'MarkdownV2', reply_markup: keyboard }).catch(() => {});
     } catch (err) {
