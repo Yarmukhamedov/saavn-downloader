@@ -124,6 +124,17 @@ function buildQualityKeyboard(current: Quality, lang: Language = 'uz'): InlineKe
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+function extractArtistToken(a: any): string {
+  if (!a) return '';
+  if (a.artist_token) return a.artist_token;
+  if (a.token) return a.token;
+  if (a.perma_url) {
+    const parts = a.perma_url.trim().replace(/\/$/, '').split('/');
+    return parts[parts.length - 1] || '';
+  }
+  return a.id || '';
+}
+
 function isItemByArtist(item: any, targetArtist: any): boolean {
   if (!item || !targetArtist) return false;
 
@@ -319,11 +330,15 @@ async function renderSearch(
           const songResp = await axios.get(`${BASE_API}/songs?q=${encodeURIComponent(smartSongQuery)}&limit=1`).catch(() => null);
           if (songResp && songResp.data?.results?.length > 0) {
             const song = songResp.data.results[0];
-            const primaryArtists = song.more_info?.artists?.primary || [];
+            const primaryArtists = [
+              ...(song.more_info?.artists?.primary || []),
+              ...(song.artists?.primary || [])
+            ];
             
             const exactArtist = primaryArtists.find((a: any) => a.name.toLowerCase().includes(query.toLowerCase())) || primaryArtists[0];
+            const token = extractArtistToken(exactArtist);
             
-            if (exactArtist) {
+            if (exactArtist && token) {
               results.push({
                 id: exactArtist.id,
                 name: exactArtist.name,
@@ -331,7 +346,7 @@ async function renderSearch(
                 image: exactArtist.image,
                 type: 'artist',
                 perma_url: exactArtist.perma_url,
-                token: exactArtist.artist_token || exactArtist.token
+                token: token
               });
             }
           }
