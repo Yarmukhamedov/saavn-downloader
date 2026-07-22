@@ -627,15 +627,32 @@ bot.on('callback_query:data', async (ctx) => {
     try {
       const resp = await axios.get(`${BASE_API}/artist?token=${token}`);
       const artist = resp.data;
-      if (!artist || !artist.topSongs || artist.topSongs.length === 0) {
+      if (!artist || !artist.name) {
         await editOrReplaceText(ctx, t(lang, 'noSongsFound'), { parse_mode: 'MarkdownV2' });
         return;
       }
+
+      // Also search songs by artist name to include collabs & featured tracks
+      let searchSongs: any[] = [];
+      const searchResp = await axios.get(`${BASE_API}/songs?q=${encodeURIComponent(artist.name)}&limit=50`).catch(() => null);
+      if (searchResp && searchResp.data?.results) {
+        searchSongs = searchResp.data.results;
+      }
+
+      const combinedSongs = [
+        ...(artist.topSongs || []),
+        ...searchSongs
+      ];
       
       const keyboard = new InlineKeyboard();
       let msgText = `👤 *${escapeMd(artist.name)}*\n\n*Top 10:*\n`;
       
-      const uniqueTopSongs = dedupeByKeys(artist.topSongs || []);
+      const uniqueTopSongs = dedupeByKeys(combinedSongs);
+      if (uniqueTopSongs.length === 0) {
+        await editOrReplaceText(ctx, t(lang, 'noSongsFound'), { parse_mode: 'MarkdownV2' });
+        return;
+      }
+
       uniqueTopSongs.slice(0, 10).forEach((song: any, index: number) => {
         const title = song.title || 'Track';
         const dur = formatDuration(song.duration || song.more_info?.duration);
@@ -676,11 +693,21 @@ bot.on('callback_query:data', async (ctx) => {
     try {
       const resp = await axios.get(`${BASE_API}/artist?token=${token}`);
       const artist = resp.data;
+
+      // Also search albums by artist name to include collab & featured albums
+      let searchAlbums: any[] = [];
+      if (artist && artist.name) {
+        const searchResp = await axios.get(`${BASE_API}/albums?q=${encodeURIComponent(artist.name)}&limit=50`).catch(() => null);
+        if (searchResp && searchResp.data?.results) {
+          searchAlbums = searchResp.data.results;
+        }
+      }
       
       const allAlbums = [
         ...(artist.topAlbums || []),
         ...(artist.latest_release || []),
-        ...(artist.singles || [])
+        ...(artist.singles || []),
+        ...searchAlbums
       ];
       
       const uniqueAlbums = dedupeByKeys(allAlbums);
