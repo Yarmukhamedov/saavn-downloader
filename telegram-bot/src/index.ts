@@ -661,8 +661,12 @@ bot.on('message:text', async (ctx) => {
         const ogDescMatch = html.match(/<meta[^>]*property=["'](?:og|twitter):description["'][^>]*content=["'](.*?)["']/i) ||
                             html.match(/<meta[^>]*content=["'](.*?)["'][^>]*property=["'](?:og|twitter):description["']/i);
         if (ogDescMatch && ogDescMatch[1]) {
-          const parts = ogDescMatch[1].split('·').map((p: string) => p.trim());
-          if (parts.length >= 2) {
+          const desc = ogDescMatch[1];
+          const parts = desc.split('·').map((p: string) => p.trim());
+          if (parts.length >= 3 && parts[2].toLowerCase().includes('song')) {
+            songArtist = parts[0].replace(/^Listen to .*? on Spotify\.\s*/i, '').trim();
+            songTitle = parts[1].trim();
+          } else if (parts.length >= 2) {
             songArtist = parts[0].replace(/^Listen to .*? on Spotify\.\s*/i, '').trim();
           }
         }
@@ -675,9 +679,16 @@ bot.on('message:text', async (ctx) => {
           .trim();
 
         if (songTitle && !songTitle.toLowerCase().includes('spotify - home')) {
-          const searchQuery = songArtist ? `${songArtist} ${songTitle}` : songTitle;
-          const searchResp = await axios.get(`${BASE_API}/songs?q=${encodeURIComponent(searchQuery)}&limit=1`);
-          if (searchResp.data?.results?.length > 0) {
+          const primaryArtist = songArtist ? songArtist.split(',')[0].trim() : '';
+          const q1 = primaryArtist ? `${primaryArtist} ${songTitle}` : songTitle;
+          const q2 = songTitle;
+
+          let searchResp = await axios.get(`${BASE_API}/songs?q=${encodeURIComponent(q1)}`).catch(() => null);
+          if (!searchResp?.data?.results?.length && q2 !== q1) {
+            searchResp = await axios.get(`${BASE_API}/songs?q=${encodeURIComponent(q2)}`).catch(() => null);
+          }
+
+          if (searchResp && searchResp.data?.results?.length > 0) {
             permaUrl = searchResp.data.results[0].perma_url;
           }
         }
