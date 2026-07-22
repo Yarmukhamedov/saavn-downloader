@@ -174,8 +174,51 @@ async function renderSearch(
   const url = `${BASE_API}/${type}s?q=${encodeURIComponent(saavnQuery)}&page=${page}`;
   
   try {
+    let results: any[] = [];
+
+    // Smart Artist Logic: If searching for an artist and it's a short query,
+    // find the top song for this artist and extract the actual artist object.
+    if (type === 'artist' && page === 1 && query.split(' ').length <= 2) {
+      try {
+        const itunes = await axios.get(`https://itunes.apple.com/search?term=${encodeURIComponent(query)}&entity=song&limit=1`);
+        if (itunes.data?.results?.length > 0) {
+          const item = itunes.data.results[0];
+          const smartSongQuery = `${item.artistName} ${item.trackName}`;
+          
+          const songResp = await axios.get(`${BASE_API}/songs?q=${encodeURIComponent(smartSongQuery)}&limit=1`);
+          if (songResp.data?.results?.length > 0) {
+            const song = songResp.data.results[0];
+            const primaryArtists = song.more_info?.artists?.primary || [];
+            
+            const exactArtist = primaryArtists.find((a: any) => a.name.toLowerCase().includes(query.toLowerCase())) || primaryArtists[0];
+            
+            if (exactArtist) {
+              results.push({
+                id: exactArtist.id,
+                name: exactArtist.name,
+                role: exactArtist.role || 'singer',
+                image: exactArtist.image,
+                type: 'artist',
+                perma_url: exactArtist.perma_url,
+                token: exactArtist.artist_token || exactArtist.token
+              });
+            }
+          }
+        }
+      } catch (e) {
+        console.error('Smart Artist API error:', e);
+      }
+    }
+
     const resp = await axios.get(url);
-    const results = resp.data?.results || [];
+    const apiResults = resp.data?.results || [];
+
+    if (results.length > 0) {
+      const smartToken = results[0].token;
+      results = [...results, ...apiResults.filter((r: any) => r.token !== smartToken)];
+    } else {
+      results = apiResults;
+    }
 
     if (!Array.isArray(results) || results.length === 0) {
       const emptyMsg = `❌ "*${escapeMd(query)}*" bo'yicha hech narsa topilmadi\\.`;
