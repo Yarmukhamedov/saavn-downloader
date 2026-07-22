@@ -497,7 +497,19 @@ bot.on('callback_query:data', async (ctx) => {
 
   // ── Artist Albums Fetch ──────────────────────────────────────────────────
   if (data.startsWith('aralb_')) {
-    const token = data.replace('aralb_', '');
+    const payload = data.replace('aralb_', '');
+    let page = 1;
+    let token = payload;
+
+    const firstUnderscore = payload.indexOf('_');
+    if (firstUnderscore !== -1) {
+      const parsedPage = parseInt(payload.slice(0, firstUnderscore), 10);
+      if (!isNaN(parsedPage)) {
+        page = parsedPage;
+        token = payload.slice(firstUnderscore + 1);
+      }
+    }
+
     await ctx.editMessageText(`⏳ *Albomlar yuklanmoqda…*`, { parse_mode: 'MarkdownV2' }).catch(() => {});
     await ctx.answerCallbackQuery().catch(() => {});
     
@@ -517,18 +529,36 @@ bot.on('callback_query:data', async (ctx) => {
         await ctx.editMessageText(`⚠️ *Ushbu xonanda uchun albomlar topilmadi\\.*`, { parse_mode: 'MarkdownV2' }).catch(() => {});
         return;
       }
+
+      const pageSize = 10;
+      const totalAlbums = uniqueAlbums.length;
+      const totalPages = Math.ceil(totalAlbums / pageSize);
+      const currentPage = Math.max(1, Math.min(page, totalPages));
+      
+      const startIndex = (currentPage - 1) * pageSize;
+      const pageAlbums = uniqueAlbums.slice(startIndex, startIndex + pageSize);
       
       const keyboard = new InlineKeyboard();
-      let msgText = `👤 *${escapeMd(artist.name)}* — 💿 *Albom va Singllari:*\n\n`;
+      let msgText = `👤 *${escapeMd(artist.name)}* — 💿 *Albom va Singllari* \\(${currentPage}/${totalPages}\\-sahifa\\):\n\n`;
       
-      uniqueAlbums.slice(0, 15).forEach((album: any, index: number) => {
+      pageAlbums.forEach((album: any, index: number) => {
         const title = album.title || 'Album';
-        const btnText = title;
-        keyboard.text(`💿 ${index + 1}. ${btnText.slice(0, 45)}`, `al_${album.token}`).row();
+        const itemNumber = startIndex + index + 1;
+        keyboard.text(`💿 ${itemNumber}. ${title.slice(0, 42)}`, `al_${album.token}`).row();
       });
-      
-      keyboard.text('⬅️ Orqaga', `ar_${token}`).row();
+
+      // Pagination controls
+      if (currentPage > 1) {
+        keyboard.text('⬅️ Orqaga', `aralb_${currentPage - 1}_${token}`);
+      }
       keyboard.text('❌ Yopish', 'close_msg');
+      if (currentPage < totalPages) {
+        keyboard.text('Oldinga ➡️', `aralb_${currentPage + 1}_${token}`);
+      }
+      keyboard.row();
+
+      // Back to Artist Profile
+      keyboard.text('🔙 Xonanda sahifasiga', `ar_${token}`).row();
       
       await ctx.editMessageText(msgText, { parse_mode: 'MarkdownV2', reply_markup: keyboard }).catch(() => {});
     } catch (err) {
