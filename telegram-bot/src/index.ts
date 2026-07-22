@@ -559,13 +559,33 @@ bot.on('callback_query:data', async (ctx) => {
       }
       
       const keyboard = new InlineKeyboard();
-      const msgText = `👤 *${escapeMd(artist.name)}*\n\n${t(lang, 'selectOption')}`;
+      // Row 1: Left: Top 10 Tracks, Right: Albums
+      keyboard
+        .text('Top 10 Tracks', `artop_${token}`)
+        .text('Albums', `aralb_${token}`)
+        .row();
       
-      keyboard.text(t(lang, 'top10'), `artop_${token}`).row();
-      keyboard.text(t(lang, 'albums'), `aralb_${token}`).row();
+      // Row 2: Bottom wide Close button
       keyboard.text(t(lang, 'close'), 'close_msg').row();
       
-      await ctx.editMessageText(msgText, { parse_mode: 'MarkdownV2', reply_markup: keyboard }).catch(() => {});
+      const imgUrl = typeof artist.image === 'string' && artist.image.startsWith('http')
+        ? artist.image.replace(/150x150|50x50/, '500x500')
+        : undefined;
+
+      await ctx.deleteMessage().catch(() => {});
+
+      if (imgUrl) {
+        await ctx.replyWithPhoto(imgUrl, {
+          caption: `*${escapeMd(artist.name)}*`,
+          parse_mode: 'MarkdownV2',
+          reply_markup: keyboard
+        });
+      } else {
+        await ctx.reply(`👤 *${escapeMd(artist.name)}*`, {
+          parse_mode: 'MarkdownV2',
+          reply_markup: keyboard
+        });
+      }
     } catch (err) {
       console.error('Artist fetch error:', err);
       await ctx.editMessageText(t(lang, 'noArtistFound'), { parse_mode: 'MarkdownV2' }).catch(() => {});
