@@ -414,11 +414,11 @@ async function renderSearch(
   } catch (err) {
     console.error('Search rendering error:', err);
     const lang = getUserLanguage(ctx);
-    const errMsg = `❌ *${t(lang, 'downloadErr')}*`;
+    const errMsg = t(lang, 'downloadErr');
     if (messageId) {
-      await ctx.api.editMessageText(ctx.chat.id, messageId, errMsg, { parse_mode: 'MarkdownV2' });
+      await ctx.api.editMessageText(ctx.chat.id, messageId, errMsg, { parse_mode: 'MarkdownV2' }).catch(() => {});
     } else {
-      await ctx.reply(errMsg, { parse_mode: 'MarkdownV2' });
+      await ctx.reply(errMsg, { parse_mode: 'MarkdownV2' }).catch(() => {});
     }
   }
 }

@@ -57,7 +57,7 @@ export const translations = {
     albumSingle: `Альбом`,
     artistSingle: `Исполнитель`,
     resultsFor: `результаты по запросу`,
-    page: `стр.`,
+    page: `стр\\.`,
     notFound: `ничего не найдено\\.`,
     loading: `⏳ *Загрузка…*`,
     albumLoading: `⏳ *Загрузка альбома…*`,
