@@ -98,7 +98,7 @@ async function downloadAndSendAudio(ctx: any, permaUrl: string, quality: Quality
     const duration = parseInt(song.more_info?.duration, 10) || 0;
     const thumbUrl = song.image ? song.image.replace(/150x150|50x50/, '500x500') : undefined;
 
-    const caption = `🎵 *${escapeMd(title)}*\n👤 ${escapeMd(performer)}\n🔊 ${quality} kbps\n\n🤖 @saavnmusicbot`;
+    const caption = '🤖 @saavnmusicbot';
 
     const reqId = crypto.randomBytes(8).toString('hex');
     tmpAudioPath = path.join(process.cwd(), `tmp_${reqId}.m4a`);
@@ -207,6 +207,25 @@ async function renderSearch(
         }
       } catch (e) {
         console.error('Smart Artist API error:', e);
+      }
+    }
+
+    // Smart Album Logic: If searching for an album and it's a short query,
+    // find top album via iTunes API, and fetch that specific album from JioSaavn.
+    if (type === 'album' && page === 1 && query.split(' ').length <= 2) {
+      try {
+        const itunes = await axios.get(`https://itunes.apple.com/search?term=${encodeURIComponent(query)}&entity=album&limit=1`);
+        if (itunes.data?.results?.length > 0) {
+          const item = itunes.data.results[0];
+          const smartAlbumQuery = `${item.artistName} ${item.collectionName}`;
+          
+          const albumResp = await axios.get(`${BASE_API}/albums?q=${encodeURIComponent(smartAlbumQuery)}&limit=1`);
+          if (albumResp.data?.results?.length > 0) {
+            results.push(albumResp.data.results[0]);
+          }
+        }
+      } catch (e) {
+        console.error('Smart Album API error:', e);
       }
     }
 
@@ -660,13 +679,52 @@ bot.on('message:text', async (ctx) => {
 
   if (text.includes('spotify.com') || text.includes('apple.com')) {
     try {
-      const res = await axios.get(text, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' } });
-      const match = res.data.match(/<title>(.*?)<\/title>/i);
-      if (match && match[1]) {
-        let title = match[1];
-        title = title.replace(/- song and lyrics by.*/i, '').replace(/\| Spotify/i, '');
-        title = title.replace(/by .*? on Apple Music/i, '').replace(/on Apple Music/i, '');
-        query = title.trim();
+      let fetchUrl = text;
+      const spotifyMatch = text.match(/track\/([a-zA-Z0-9]+)/);
+      if (spotifyMatch) {
+        fetchUrl = `https://open.spotify.com/embed/track/${spotifyMatch[1]}`;
+      } else if (text.includes('music.apple.com')) {
+        fetchUrl = text.replace('music.apple.com', 'embed.music.apple.com');
+      }
+
+      const res = await axios.get(fetchUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept-Language': 'en-US,en;q=0.9'
+        }
+      });
+      const html = res.data || '';
+
+      let rawTitle = '';
+      const ogTitleMatch = html.match(/<meta[^>]*property=["'](?:og|twitter):title["'][^>]*content=["'](.*?)["']/i) ||
+                           html.match(/<meta[^>]*content=["'](.*?)["'][^>]*property=["'](?:og|twitter):title["']/i);
+      if (ogTitleMatch && ogTitleMatch[1]) {
+        rawTitle = ogTitleMatch[1];
+      } else {
+        const match = html.match(/<title>(.*?)<\/title>/i);
+        if (match && match[1]) rawTitle = match[1];
+      }
+
+      if (rawTitle && !rawTitle.toLowerCase().includes('spotify - home')) {
+        let clean = rawTitle
+          .replace(/\| Spotify/gi, '')
+          .replace(/on Apple Music/gi, '')
+          .replace(/- song and lyrics by.*/gi, '')
+          .replace(/- song by.*/gi, '')
+          .trim();
+
+        const ogDescMatch = html.match(/<meta[^>]*property=["'](?:og|twitter):description["'][^>]*content=["'](.*?)["']/i) ||
+                            html.match(/<meta[^>]*content=["'](.*?)["'][^>]*property=["'](?:og|twitter):description["']/i);
+        if (ogDescMatch && ogDescMatch[1]) {
+          const parts = ogDescMatch[1].split('·').map((p: string) => p.trim());
+          if (parts.length >= 2) {
+            const artist = parts[0].replace(/^Listen to .*? on Spotify\.\s*/i, '').trim();
+            if (artist && !clean.toLowerCase().includes(artist.toLowerCase())) {
+              clean = `${artist} ${clean}`;
+            }
+          }
+        }
+        if (clean) query = clean;
       }
     } catch (e) {
       console.error('Link parse error:', e);
