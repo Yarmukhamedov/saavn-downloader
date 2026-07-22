@@ -41,6 +41,36 @@ function cacheSearch(query: string): string {
   return id;
 }
 
+// ── Deduplication Utility ───────────────────────────────────────────────────
+function dedupeByKeys(items: any[]): any[] {
+  if (!Array.isArray(items)) return [];
+  const seenKeys = new Set<string>();
+  const seenTitles = new Set<string>();
+
+  return items.filter(item => {
+    if (!item) return false;
+
+    const idKey = item.id || item.token || item.perma_url || item.track_url || '';
+    if (idKey && seenKeys.has(idKey)) {
+      return false;
+    }
+
+    const rawTitle = (item.title || item.name || '').toLowerCase().trim();
+    const cleanTitle = rawTitle.replace(/[\s\-_]+/g, '');
+    const primaryArtist = (item.more_info?.artists?.primary?.map((a: any) => a.name).join('') || item.subtitle || '').toLowerCase().replace(/[\s\-_]+/g, '');
+    const compositeTitleKey = `${cleanTitle}__${primaryArtist}`;
+
+    if (cleanTitle && seenTitles.has(compositeTitleKey)) {
+      return false;
+    }
+
+    if (idKey) seenKeys.add(idKey);
+    if (cleanTitle) seenTitles.add(compositeTitleKey);
+
+    return true;
+  });
+}
+
 // ── User quality preferences ──────────────────────────────────────────────────
 type Quality = '96' | '160' | '320';
 const userQuality = new Map<number, Quality>(); // userId -> preferred quality
@@ -232,12 +262,7 @@ async function renderSearch(
     const resp = await axios.get(url);
     const apiResults = resp.data?.results || [];
 
-    if (results.length > 0) {
-      const smartToken = results[0].token;
-      results = [...results, ...apiResults.filter((r: any) => r.token !== smartToken)];
-    } else {
-      results = apiResults;
-    }
+    results = dedupeByKeys([...results, ...apiResults]);
 
     if (!Array.isArray(results) || results.length === 0) {
       const emptyMsg = `❌ "*${escapeMd(query)}*" bo'yicha hech narsa topilmadi\\.`;
@@ -476,7 +501,8 @@ bot.on('callback_query:data', async (ctx) => {
       const keyboard = new InlineKeyboard();
       let msgText = `👤 *${escapeMd(artist.name)}*\n\n*Top 10:*\n`;
       
-      artist.topSongs.slice(0, 10).forEach((song: any, index: number) => {
+      const uniqueTopSongs = dedupeByKeys(artist.topSongs || []);
+      uniqueTopSongs.slice(0, 10).forEach((song: any, index: number) => {
         const title = song.title || 'Track';
         const dur = formatDuration(song.duration || song.more_info?.duration);
         msgText += `${index + 1}\\. ${escapeMd(title)} \\(${dur}\\)\n`;
@@ -523,7 +549,7 @@ bot.on('callback_query:data', async (ctx) => {
         ...(artist.singles || [])
       ];
       
-      const uniqueAlbums = Array.from(new Map(allAlbums.map(a => [a.token, a])).values());
+      const uniqueAlbums = dedupeByKeys(allAlbums);
       
       if (!uniqueAlbums || uniqueAlbums.length === 0) {
         await ctx.editMessageText(`⚠️ *Ushbu xonanda uchun albomlar topilmadi\\.*`, { parse_mode: 'MarkdownV2' }).catch(() => {});
