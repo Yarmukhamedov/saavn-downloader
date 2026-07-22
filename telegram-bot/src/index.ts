@@ -1038,132 +1038,15 @@ bot.on('message:text', async (ctx) => {
     lastUserMessageMap.set(ctx.chat.id, ctx.message.message_id);
   }
 
-  // ── JioSaavn direct URL ────────────────────────────────────────────────
-  // ── Direct Link Handler (Spotify, Apple Music, JioSaavn) ───────────────────
-  if (text.includes('spotify.com') || text.includes('apple.com') || text.includes('jiosaavn.com/song/')) {
+  // ── JioSaavn Direct Link Handler ───────────────────────────────────────────
+  if (text.includes('jiosaavn.com/song/')) {
     const statusMsg = await ctx.reply('⏳ *Musiqa tayyorlanmoqda, kuting…*', { parse_mode: 'MarkdownV2' });
 
     try {
       let permaUrl = '';
-
-      if (text.includes('jiosaavn.com/song/')) {
-        const resp = await axios.get(`${SONG_API}?url=${encodeURIComponent(text)}`);
-        if (resp.data?.perma_url) {
-          permaUrl = resp.data.perma_url;
-        }
-      } else {
-        let songTitle = '';
-        let songArtist = '';
-
-        if (text.includes('spotify.com')) {
-          // Primary Method: Fetch Spotify page with TelegramBot User-Agent (Spotify's official crawler whitelist!)
-          try {
-            const res = await axios.get(text, {
-              headers: {
-                'User-Agent': 'TelegramBot (like TwitterBot)',
-                'Accept-Language': 'en-US,en;q=0.9'
-              }
-            }).catch(() => null);
-
-            if (res?.data) {
-              const html = res.data;
-              const ogTitle = html.match(/<meta[^>]*property=["'](?:og|twitter):title["'][^>]*content=["'](.*?)["']/i) ||
-                              html.match(/<meta[^>]*content=["'](.*?)["'][^>]*property=["'](?:og|twitter):title["']/i);
-              const ogDesc = html.match(/<meta[^>]*property=["'](?:og|twitter):description["'][^>]*content=["'](.*?)["']/i) ||
-                             html.match(/<meta[^>]*content=["'](.*?)["'][^>]*property=["'](?:og|twitter):description["']/i);
-
-              if (ogTitle && ogTitle[1]) {
-                songTitle = ogTitle[1];
-              }
-
-              if (ogDesc && ogDesc[1]) {
-                const desc = ogDesc[1];
-                const parts = desc.split('·').map((p: string) => p.trim());
-                if (parts.length >= 2) {
-                  songArtist = parts[0];
-                  if (!songTitle || songTitle.toLowerCase().includes('spotify')) {
-                    songTitle = parts[1];
-                  }
-                }
-              }
-            }
-          } catch (e) {}
-
-          // Secondary Fallback: Spotify Embed HTML __NEXT_DATA__ & Regex
-          if (!songTitle || !songArtist) {
-            const spotifyMatch = text.match(/track\/([a-zA-Z0-9]+)/);
-            if (spotifyMatch) {
-              const trackId = spotifyMatch[1];
-              try {
-                const fetchUrl = `https://open.spotify.com/embed/track/${trackId}`;
-                const res = await axios.get(fetchUrl, {
-                  headers: {
-                    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                    'Accept-Language': 'en-US,en;q=0.9'
-                  }
-                }).catch(() => null);
-
-                if (res?.data) {
-                  const html = res.data;
-                  const match = html.match(/<script id="__NEXT_DATA__" type="application\/json">(.*?)<\/script>/);
-                  if (match && match[1]) {
-                    try {
-                      const data = JSON.parse(match[1]);
-                      const entity = data?.props?.pageProps?.state?.data?.entity;
-                      if (!songTitle) songTitle = entity?.name || entity?.title || '';
-                      if (!songArtist && entity?.artists?.length > 0) {
-                        songArtist = entity.artists.map((a: any) => a.name).join(', ');
-                      }
-                    } catch (e) {}
-                  }
-                }
-              } catch (e) {}
-
-              // Tertiary Fallback: Spotify oEmbed API
-              if (!songTitle) {
-                try {
-                  const oembed = await axios.get(`https://open.spotify.com/oembed?url=${encodeURIComponent('https://open.spotify.com/track/' + trackId)}`).catch(() => null);
-                  if (oembed?.data?.title) {
-                    songTitle = oembed.data.title;
-                    if (oembed.data.author_name) songArtist = oembed.data.author_name;
-                  }
-                } catch (e) {}
-              }
-            }
-          }
-        } else if (text.includes('music.apple.com')) {
-          try {
-            const urlObj = new URL(text);
-            const parts = urlObj.pathname.split('/').filter(Boolean);
-            const albumIdx = parts.indexOf('album');
-            if (albumIdx !== -1 && parts[albumIdx + 1]) {
-              songTitle = decodeURIComponent(parts[albumIdx + 1]).replace(/-/g, ' ');
-            }
-          } catch (e) {}
-        }
-
-        // 3. JioSaavn Resolution with strict artist filtering
-        if (songTitle) {
-          const q1 = songArtist ? `${songArtist} ${songTitle}` : songTitle;
-          let searchResp = await axios.get(`${BASE_API}/songs?q=${encodeURIComponent(q1)}`).catch(() => null);
-          if (!searchResp?.data?.results?.length && songArtist) {
-            searchResp = await axios.get(`${BASE_API}/songs?q=${encodeURIComponent(songTitle)}`).catch(() => null);
-          }
-
-          if (searchResp && searchResp.data?.results?.length > 0) {
-            const results = searchResp.data.results;
-            if (songArtist) {
-              const targetName = songArtist.toLowerCase().trim();
-              const match = results.find((s: any) => {
-                const aStr = (s.subtitle || s.primary_artists || '').toLowerCase();
-                return aStr.includes(targetName);
-              }) || results[0];
-              permaUrl = match.perma_url;
-            } else {
-              permaUrl = results[0].perma_url;
-            }
-          }
-        }
+      const resp = await axios.get(`${SONG_API}?url=${encodeURIComponent(text)}`);
+      if (resp.data?.perma_url) {
+        permaUrl = resp.data.perma_url;
       }
 
       if (permaUrl) {
@@ -1180,7 +1063,7 @@ bot.on('message:text', async (ctx) => {
       return;
     } catch (err) {
       console.error('Direct link error:', err);
-      await ctx.api.editMessageText(ctx.chat.id, statusMsg.message_id, '❌ *Musiqani yuklashda xatolik yuz berdi\\.*', { parse_mode: 'MarkdownV2' });
+      await ctx.api.editMessageText(ctx.chat.id, statusMsg.message_id, '❌ *Musiqani yuklashda xatolik yuz berdi\\.*', { parse_mode: 'MarkdownV2' }).catch(() => {});
       return;
     }
   }
