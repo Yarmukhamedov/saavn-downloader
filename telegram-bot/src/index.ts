@@ -124,6 +124,15 @@ function buildQualityKeyboard(current: Quality, lang: Language = 'uz'): InlineKe
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+async function editOrReplaceText(ctx: any, text: string, options: any) {
+  try {
+    await ctx.editMessageText(text, options);
+  } catch (err) {
+    await ctx.deleteMessage().catch(() => {});
+    await ctx.reply(text, options);
+  }
+}
+
 function escapeMd(text: string = ''): string {
   return text.replace(/[_*[\]()~`>#+\-=|{}.!]/g, '\\$&');
 }
@@ -597,14 +606,13 @@ bot.on('callback_query:data', async (ctx) => {
   if (data.startsWith('artop_')) {
     const lang = getUserLanguage(ctx);
     const token = data.replace('artop_', '');
-    await ctx.editMessageText(t(lang, 'topSongsLoading'), { parse_mode: 'MarkdownV2' }).catch(() => {});
     await ctx.answerCallbackQuery().catch(() => {});
     
     try {
       const resp = await axios.get(`${BASE_API}/artist?token=${token}`);
       const artist = resp.data;
       if (!artist || !artist.topSongs || artist.topSongs.length === 0) {
-        await ctx.editMessageText(t(lang, 'noSongsFound'), { parse_mode: 'MarkdownV2' }).catch(() => {});
+        await editOrReplaceText(ctx, t(lang, 'noSongsFound'), { parse_mode: 'MarkdownV2' });
         return;
       }
       
@@ -623,10 +631,10 @@ bot.on('callback_query:data', async (ctx) => {
       keyboard.text(t(lang, 'prev'), `ar_${token}`).row();
       keyboard.text(t(lang, 'close'), 'close_msg').row();
       
-      await ctx.editMessageText(msgText, { parse_mode: 'MarkdownV2', reply_markup: keyboard }).catch(() => {});
+      await editOrReplaceText(ctx, msgText, { parse_mode: 'MarkdownV2', reply_markup: keyboard });
     } catch (err) {
       console.error('Artist Top 10 fetch error:', err);
-      await ctx.editMessageText(t(lang, 'noSongsFound'), { parse_mode: 'MarkdownV2' }).catch(() => {});
+      await editOrReplaceText(ctx, t(lang, 'noSongsFound'), { parse_mode: 'MarkdownV2' });
     }
     return;
   }
@@ -647,7 +655,6 @@ bot.on('callback_query:data', async (ctx) => {
       }
     }
 
-    await ctx.editMessageText(t(lang, 'albumsLoading'), { parse_mode: 'MarkdownV2' }).catch(() => {});
     await ctx.answerCallbackQuery().catch(() => {});
     
     try {
@@ -663,7 +670,7 @@ bot.on('callback_query:data', async (ctx) => {
       const uniqueAlbums = dedupeByKeys(allAlbums);
       
       if (!uniqueAlbums || uniqueAlbums.length === 0) {
-        await ctx.editMessageText(t(lang, 'noAlbumsFound'), { parse_mode: 'MarkdownV2' }).catch(() => {});
+        await editOrReplaceText(ctx, t(lang, 'noAlbumsFound'), { parse_mode: 'MarkdownV2' });
         return;
       }
 
@@ -702,10 +709,10 @@ bot.on('callback_query:data', async (ctx) => {
       keyboard.text(t(lang, 'backToArtist'), `ar_${token}`).row();
       keyboard.text(t(lang, 'close'), 'close_msg').row();
       
-      await ctx.editMessageText(msgText, { parse_mode: 'MarkdownV2', reply_markup: keyboard }).catch(() => {});
+      await editOrReplaceText(ctx, msgText, { parse_mode: 'MarkdownV2', reply_markup: keyboard });
     } catch (err) {
       console.error('Artist Albums fetch error:', err);
-      await ctx.editMessageText(t(lang, 'noAlbumsFound'), { parse_mode: 'MarkdownV2' }).catch(() => {});
+      await editOrReplaceText(ctx, t(lang, 'noAlbumsFound'), { parse_mode: 'MarkdownV2' });
     }
     return;
   }
