@@ -120,6 +120,6 @@ export const translations = {
   }
 };
 
-export function t(lang: Language, key: keyof typeof translations['uz']): string {
-  return translations[lang]?.[key] || translations['uz'][key] || '';
+export function t(lang: Language, key: keyof typeof translations['en']): string {
+  return translations[lang]?.[key] || translations['en'][key] || '';
 }

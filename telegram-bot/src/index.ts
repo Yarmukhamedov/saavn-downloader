@@ -82,9 +82,9 @@ function getUserLanguage(ctx: any): Language {
     return userLanguage.get(userId)!;
   }
   const code = ctx.from?.language_code || '';
+  if (code.startsWith('uz')) return 'uz';
   if (code.startsWith('ru')) return 'ru';
-  if (code.startsWith('en')) return 'en';
-  return 'uz';
+  return 'en';
 }
 
 function buildLanguageKeyboard(current: Language): InlineKeyboard {
