@@ -557,9 +557,13 @@ bot.command('start', async (ctx) => {
 // ── /language ─────────────────────────────────────────────────────────────────
 bot.command(['language', 'lang'], async (ctx) => {
   const lang = getUserLanguage(ctx);
+  if (ctx.chat?.id && ctx.message?.message_id) {
+    lastUserMessageMap.set(ctx.chat.id, ctx.message.message_id);
+  }
   await ctx.reply(t(lang, 'langTitle'), {
     parse_mode: 'MarkdownV2',
     reply_markup: buildLanguageKeyboard(lang),
+    reply_parameters: ctx.message?.message_id ? { message_id: ctx.message.message_id } : undefined,
   });
 });
 
@@ -569,9 +573,17 @@ bot.command('quality', async (ctx) => {
   const lang = getUserLanguage(ctx);
   const current = getUserQuality(userId);
 
+  if (ctx.chat?.id && ctx.message?.message_id) {
+    lastUserMessageMap.set(ctx.chat.id, ctx.message.message_id);
+  }
+
   await ctx.reply(
     `${t(lang, 'qualityTitle')} *${escapeMd(QUALITY_LABELS[current])}*`,
-    { parse_mode: 'MarkdownV2', reply_markup: buildQualityKeyboard(current, lang) }
+    {
+      parse_mode: 'MarkdownV2',
+      reply_markup: buildQualityKeyboard(current, lang),
+      reply_parameters: ctx.message?.message_id ? { message_id: ctx.message.message_id } : undefined,
+    }
   );
 });
 
