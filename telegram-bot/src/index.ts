@@ -153,10 +153,21 @@ function isItemByArtist(item: any, targetArtist: any): boolean {
     if (aName && targetVariants.includes(aName)) return true;
   }
 
-  // 2. Parse subtitle or primary_artists string (split by , & ; feat ft and)
-  const rawArtists = item.primary_artists || item.subtitle || item.more_info?.artistMap?.primary_artists?.map((a: any) => a.name).join(', ') || '';
-  if (rawArtists) {
-    const names = rawArtists
+  // 2. Extract all raw artist text fields from JioSaavn item
+  const rawFields = [
+    item.primary_artists,
+    item.subtitle,
+    item.header_desc,
+    item.music,
+    item.artist,
+    item.more_info?.music,
+    item.more_info?.singers,
+    item.more_info?.artistMap?.primary_artists?.map((a: any) => a.name).join(', '),
+    item.more_info?.artistMap?.artists?.map((a: any) => a.name).join(', '),
+  ].filter(Boolean);
+
+  for (const rawArtists of rawFields) {
+    const names = String(rawArtists)
       .split(/[,;&]|\bfeat\.?\b|\bft\.?\b|\band\b/i)
       .map((s: string) => s.trim().toLowerCase())
       .filter(Boolean);
@@ -677,11 +688,23 @@ bot.on('callback_query:data', async (ctx) => {
         return;
       }
 
-      // Also search songs by artist name to include collabs & featured tracks
+      // Also search songs by artist name (with variations) to include collabs & featured tracks
       let searchSongs: any[] = [];
-      const searchResp = await axios.get(`${BASE_API}/songs?q=${encodeURIComponent(artist.name)}&limit=50`).catch(() => null);
-      if (searchResp && searchResp.data?.results) {
-        searchSongs = searchResp.data.results.filter((song: any) => isItemByArtist(song, artist));
+      if (artist && artist.name) {
+        const cleanName = artist.name.replace(/['‘’`]/g, '');
+        const spaceName = artist.name.replace(/['‘’`]/g, ' ');
+
+        const queries = Array.from(new Set([artist.name, cleanName, spaceName].filter(Boolean)));
+        const resps = await Promise.all(
+          queries.map((q) => axios.get(`${BASE_API}/songs?q=${encodeURIComponent(q)}&limit=50`).catch(() => null))
+        );
+
+        for (const r of resps) {
+          if (r && r.data?.results) {
+            const valid = r.data.results.filter((song: any) => isItemByArtist(song, artist));
+            searchSongs.push(...valid);
+          }
+        }
       }
 
       const combinedSongs = [
@@ -739,12 +762,22 @@ bot.on('callback_query:data', async (ctx) => {
       const resp = await axios.get(`${BASE_API}/artist?token=${token}`);
       const artist = resp.data;
 
-      // Also search albums by artist name to include collab & featured albums
+      // Also search albums by artist name (with variations) to include collab & featured albums
       let searchAlbums: any[] = [];
       if (artist && artist.name) {
-        const searchResp = await axios.get(`${BASE_API}/albums?q=${encodeURIComponent(artist.name)}&limit=50`).catch(() => null);
-        if (searchResp && searchResp.data?.results) {
-          searchAlbums = searchResp.data.results.filter((album: any) => isItemByArtist(album, artist));
+        const cleanName = artist.name.replace(/['‘’`]/g, '');
+        const spaceName = artist.name.replace(/['‘’`]/g, ' ');
+
+        const queries = Array.from(new Set([artist.name, cleanName, spaceName].filter(Boolean)));
+        const resps = await Promise.all(
+          queries.map((q) => axios.get(`${BASE_API}/albums?q=${encodeURIComponent(q)}&limit=50`).catch(() => null))
+        );
+
+        for (const r of resps) {
+          if (r && r.data?.results) {
+            const valid = r.data.results.filter((album: any) => isItemByArtist(album, artist));
+            searchAlbums.push(...valid);
+          }
         }
       }
       
