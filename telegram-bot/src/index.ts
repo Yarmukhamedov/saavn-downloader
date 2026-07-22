@@ -72,8 +72,9 @@ function dedupeByKeys(items: any[]): any[] {
   });
 }
 
-// ── User language preferences ─────────────────────────────────────────────────
+// ── User language preferences & message tracking ──────────────────────────────
 const userLanguage = new Map<number, Language>();
+const lastUserMessageMap = new Map<number, number>();
 
 function getUserLanguage(ctx: any): Language {
   const userId = ctx.from?.id ?? 0;
@@ -581,7 +582,15 @@ bot.on('callback_query:data', async (ctx) => {
 
   // ── Close Message ────────────────────────────────────────────────────────
   if (data === 'close_msg') {
+    const msg = ctx.callbackQuery.message;
+    const chatId = ctx.chat?.id;
+    const replyToMsgId = msg?.reply_to_message?.message_id || (chatId ? lastUserMessageMap.get(chatId) : undefined);
+    
     await ctx.deleteMessage().catch(() => {});
+    if (chatId && replyToMsgId) {
+      await ctx.api.deleteMessage(chatId, replyToMsgId).catch(() => {});
+      lastUserMessageMap.delete(chatId);
+    }
     return;
   }
 
@@ -1013,6 +1022,9 @@ bot.on('callback_query:data', async (ctx) => {
 // ── Text Messages ─────────────────────────────────────────────────────────────
 bot.on('message:text', async (ctx) => {
   const text = ctx.message.text.trim();
+  if (ctx.chat?.id && ctx.message?.message_id) {
+    lastUserMessageMap.set(ctx.chat.id, ctx.message.message_id);
+  }
 
   // ── JioSaavn direct URL ────────────────────────────────────────────────
   // ── Direct Link Handler (Spotify, Apple Music, JioSaavn) ───────────────────
