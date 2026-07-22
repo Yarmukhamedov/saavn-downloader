@@ -1052,62 +1052,48 @@ bot.on('message:text', async (ctx) => {
           permaUrl = resp.data.perma_url;
         }
       } else {
-        let fetchUrl = text;
-        const spotifyMatch = text.match(/track\/([a-zA-Z0-9]+)/);
-        if (spotifyMatch) {
-          fetchUrl = `https://open.spotify.com/embed/track/${spotifyMatch[1]}`;
-        } else if (text.includes('music.apple.com')) {
-          fetchUrl = text.replace('music.apple.com', 'embed.music.apple.com');
-        }
-
-        const res = await axios.get(fetchUrl, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept-Language': 'en-US,en;q=0.9'
-          }
-        });
-        const html = res.data || '';
-
         let songTitle = '';
         let songArtist = '';
 
-        const ogTitleMatch = html.match(/<meta[^>]*property=["'](?:og|twitter):title["'][^>]*content=["'](.*?)["']/i) ||
-                             html.match(/<meta[^>]*content=["'](.*?)["'][^>]*property=["'](?:og|twitter):title["']/i);
-        if (ogTitleMatch && ogTitleMatch[1]) {
-          songTitle = ogTitleMatch[1];
-        } else {
-          const match = html.match(/<title>(.*?)<\/title>/i);
-          if (match && match[1]) songTitle = match[1];
-        }
+        if (text.includes('spotify.com')) {
+          const spotifyMatch = text.match(/track\/([a-zA-Z0-9]+)/);
+          if (spotifyMatch) {
+            const fetchUrl = `https://open.spotify.com/embed/track/${spotifyMatch[1]}`;
+            const res = await axios.get(fetchUrl, {
+              headers: {
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept-Language': 'en-US,en;q=0.9'
+              }
+            }).catch(() => null);
 
-        const ogDescMatch = html.match(/<meta[^>]*property=["'](?:og|twitter):description["'][^>]*content=["'](.*?)["']/i) ||
-                            html.match(/<meta[^>]*content=["'](.*?)["'][^>]*property=["'](?:og|twitter):description["']/i);
-        if (ogDescMatch && ogDescMatch[1]) {
-          const desc = ogDescMatch[1];
-          const parts = desc.split('·').map((p: string) => p.trim());
-          if (parts.length >= 3 && parts[2].toLowerCase().includes('song')) {
-            songArtist = parts[0].replace(/^Listen to .*? on Spotify\.\s*/i, '').trim();
-            songTitle = parts[1].trim();
-          } else if (parts.length >= 2) {
-            songArtist = parts[0].replace(/^Listen to .*? on Spotify\.\s*/i, '').trim();
+            if (res?.data) {
+              const match = res.data.match(/<script id="__NEXT_DATA__" type="application\/json">(.*?)<\/script>/);
+              if (match && match[1]) {
+                try {
+                  const data = JSON.parse(match[1]);
+                  const entity = data?.props?.pageProps?.state?.data?.entity;
+                  songTitle = entity?.name || entity?.title || '';
+                  songArtist = entity?.artists?.map((a: any) => a.name).join(', ') || '';
+                } catch (e) {}
+              }
+            }
           }
+        } else if (text.includes('music.apple.com')) {
+          try {
+            const urlObj = new URL(text);
+            const parts = urlObj.pathname.split('/').filter(Boolean);
+            const albumIdx = parts.indexOf('album');
+            if (albumIdx !== -1 && parts[albumIdx + 1]) {
+              songTitle = decodeURIComponent(parts[albumIdx + 1]).replace(/-/g, ' ');
+            }
+          } catch (e) {}
         }
 
-        songTitle = songTitle
-          .replace(/\| Spotify/gi, '')
-          .replace(/on Apple Music/gi, '')
-          .replace(/- song and lyrics by.*/gi, '')
-          .replace(/- song by.*/gi, '')
-          .trim();
-
-        if (songTitle && !songTitle.toLowerCase().includes('spotify - home')) {
-          const primaryArtist = songArtist ? songArtist.split(',')[0].trim() : '';
-          const q1 = primaryArtist ? `${primaryArtist} ${songTitle}` : songTitle;
-          const q2 = songTitle;
-
+        if (songTitle) {
+          const q1 = songArtist ? `${songArtist} ${songTitle}` : songTitle;
           let searchResp = await axios.get(`${BASE_API}/songs?q=${encodeURIComponent(q1)}`).catch(() => null);
-          if (!searchResp?.data?.results?.length && q2 !== q1) {
-            searchResp = await axios.get(`${BASE_API}/songs?q=${encodeURIComponent(q2)}`).catch(() => null);
+          if (!searchResp?.data?.results?.length && songArtist) {
+            searchResp = await axios.get(`${BASE_API}/songs?q=${encodeURIComponent(songTitle)}`).catch(() => null);
           }
 
           if (searchResp && searchResp.data?.results?.length > 0) {
