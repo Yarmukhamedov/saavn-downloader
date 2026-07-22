@@ -201,7 +201,7 @@ async function renderSearch(
     }
   }
 
-  const url = `${BASE_API}/${type}s?q=${encodeURIComponent(saavnQuery)}&page=${page}`;
+  const url = `${BASE_API}/${type}s?q=${encodeURIComponent(saavnQuery)}&limit=50`;
   
   try {
     let results: any[] = [];
@@ -274,12 +274,16 @@ async function renderSearch(
       return;
     }
 
+    const limit = 8;
+    const totalPages = Math.ceil(results.length / limit) || 1;
+    const currentPage = Math.max(1, Math.min(page, totalPages));
+    const startIndex = (currentPage - 1) * limit;
+    const topResults = results.slice(startIndex, startIndex + limit);
+
     const keyboard = new InlineKeyboard();
-    let msgText = `🔍 "*${escapeMd(query)}*" bo'yicha natijalar \\(${type === 'song' ? 'Qo\'shiq' : type === 'album' ? 'Albom' : 'Xonanda'}, ${page}\\-sahifa\\):\n\n`;
+    let msgText = `🔍 "*${escapeMd(query)}*" bo'yicha natijalar \\(${type === 'song' ? 'Qo\'shiq' : type === 'album' ? 'Albom' : 'Xonanda'}, ${currentPage}/${totalPages}\\-sahifa\\):\n\n`;
 
     const searchId = cacheSearch(query);
-    const limit = 8;
-    const topResults = results.slice(0, limit);
 
     if (type === 'song') {
       topResults.forEach((song: any, index: number) => {
@@ -287,32 +291,32 @@ async function renderSearch(
         const artist = song.more_info?.artists?.primary?.map((a: any) => a.name).join(', ') || song.subtitle || '';
         const cacheId = cacheSong(song.perma_url || song.track_url);
         const btnText = artist ? `${artist} - ${title}` : title;
-        keyboard.text(`🎵 ${index + 1}. ${btnText.slice(0, 45)}`, `dl_${cacheId}`).row();
+        const itemNumber = startIndex + index + 1;
+        keyboard.text(`🎵 ${itemNumber}. ${btnText.slice(0, 45)}`, `dl_${cacheId}`).row();
       });
     } else if (type === 'album') {
       topResults.forEach((album: any, index: number) => {
         const title = album.title || 'Album';
         const subtitle = album.subtitle || '';
         const btnText = subtitle ? `${title} - ${subtitle}` : title;
-        keyboard.text(`💿 ${index + 1}. ${btnText.slice(0, 45)}`, `al_${album.token}`).row();
+        const itemNumber = startIndex + index + 1;
+        keyboard.text(`💿 ${itemNumber}. ${btnText.slice(0, 45)}`, `al_${album.token}`).row();
       });
     } else if (type === 'artist') {
       topResults.forEach((artist: any, index: number) => {
         const name = artist.name || 'Artist';
-        keyboard.text(`👤 ${index + 1}. ${name.slice(0, 45)}`, `ar_${artist.token}`).row();
+        const itemNumber = startIndex + index + 1;
+        keyboard.text(`👤 ${itemNumber}. ${name.slice(0, 45)}`, `ar_${artist.token}`).row();
       });
     }
 
-    const total = resp.data?.total || 0;
-    const hasNext = page * 10 < total; // Usually JioSaavn returns 10 items per page
-    
     // Row 1: Pagination
-    if (page > 1) {
-      keyboard.text('⬅️ Orqaga', `sp_${searchId}_${type}_${page - 1}`);
+    if (currentPage > 1) {
+      keyboard.text('⬅️ Orqaga', `sp_${searchId}_${type}_${currentPage - 1}`);
     }
     keyboard.text('❌ Yopish', 'close_msg');
-    if (hasNext || results.length > limit) {
-      keyboard.text('Oldinga ➡️', `sp_${searchId}_${type}_${page + 1}`);
+    if (currentPage < totalPages) {
+      keyboard.text('Oldinga ➡️', `sp_${searchId}_${type}_${currentPage + 1}`);
     }
     keyboard.row();
 
