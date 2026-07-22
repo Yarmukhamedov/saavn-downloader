@@ -7,6 +7,7 @@ import crypto from 'crypto';
 import util from 'util';
 import { execFile } from 'child_process';
 import { decryptMediaUrl, getQualityUrl } from './decrypt.js';
+import { Language, LANG_NAMES, t } from './i18n.js';
 
 dotenv.config();
 
@@ -71,6 +72,31 @@ function dedupeByKeys(items: any[]): any[] {
   });
 }
 
+// ── User language preferences ─────────────────────────────────────────────────
+const userLanguage = new Map<number, Language>();
+
+function getUserLanguage(ctx: any): Language {
+  const userId = ctx.from?.id ?? 0;
+  if (userLanguage.has(userId)) {
+    return userLanguage.get(userId)!;
+  }
+  const code = ctx.from?.language_code || '';
+  if (code.startsWith('ru')) return 'ru';
+  if (code.startsWith('en')) return 'en';
+  return 'uz';
+}
+
+function buildLanguageKeyboard(current: Language): InlineKeyboard {
+  const keyboard = new InlineKeyboard();
+  const langs: Language[] = ['uz', 'ru', 'en'];
+  langs.forEach((lang) => {
+    const check = current === lang ? '🔹 ' : '';
+    keyboard.text(`${check}${LANG_NAMES[lang]}`, `setlang_${lang}`).row();
+  });
+  keyboard.text(t(current, 'close'), 'close_msg').row();
+  return keyboard;
+}
+
 // ── User quality preferences ──────────────────────────────────────────────────
 type Quality = '96' | '160' | '320';
 const userQuality = new Map<number, Quality>(); // userId -> preferred quality
@@ -81,17 +107,18 @@ function getUserQuality(userId: number): Quality {
 }
 
 const QUALITY_LABELS: Record<Quality, string> = {
-  '96':  '📻 96 kbps  — Yengil',
-  '160': '🎧 160 kbps — O\'rta',
-  '320': '🔊 320 kbps — Yuqori',
+  '96':  '📻 96 kbps  — Low',
+  '160': '🎧 160 kbps — Medium',
+  '320': '🔊 320 kbps — High',
 };
 
-function buildQualityKeyboard(current: Quality): InlineKeyboard {
+function buildQualityKeyboard(current: Quality, lang: Language = 'uz'): InlineKeyboard {
   const keyboard = new InlineKeyboard();
   (Object.keys(QUALITY_LABELS) as Quality[]).forEach((q) => {
     const check = current === q ? '✅ ' : '';
     keyboard.text(`${check}${QUALITY_LABELS[q]}`, `setq_${q}`).row();
   });
+  keyboard.text(t(lang, 'close'), 'close_msg').row();
   return keyboard;
 }
 
@@ -291,8 +318,10 @@ async function renderSearch(
 
     results = dedupeByKeys([...results, ...apiResults]);
 
+    const lang = getUserLanguage(ctx);
+
     if (!Array.isArray(results) || results.length === 0) {
-      const emptyMsg = `❌ "*${escapeMd(query)}*" bo'yicha hech narsa topilmadi\\.`;
+      const emptyMsg = `❌ "*${escapeMd(query)}*" ${t(lang, 'notFound')}`;
       if (messageId) {
         await ctx.api.editMessageText(ctx.chat.id, messageId, emptyMsg, { parse_mode: 'MarkdownV2' });
       } else {
@@ -308,7 +337,8 @@ async function renderSearch(
     const topResults = results.slice(startIndex, startIndex + limit);
 
     const keyboard = new InlineKeyboard();
-    let msgText = `🔍 "*${escapeMd(query)}*" bo'yicha natijalar \\(${type === 'song' ? 'Qo\'shiq' : type === 'album' ? 'Albom' : 'Xonanda'}, ${currentPage}/${totalPages}\\-sahifa\\):\n\n`;
+    const typeLabel = type === 'song' ? t(lang, 'songSingle') : type === 'album' ? t(lang, 'albumSingle') : t(lang, 'artistSingle');
+    let msgText = `🔍 "*${escapeMd(query)}*" ${t(lang, 'resultsFor')} \\(${typeLabel}, ${currentPage}/${totalPages}\\-${t(lang, 'page')}\\):\n\n`;
 
     const searchId = cacheSearch(query);
 
@@ -340,11 +370,11 @@ async function renderSearch(
     // Row 1: Pagination
     let hasPaginationRow = false;
     if (currentPage > 1) {
-      keyboard.text('⬅️ Orqaga', `sp_${searchId}_${type}_${currentPage - 1}`);
+      keyboard.text(t(lang, 'prev'), `sp_${searchId}_${type}_${currentPage - 1}`);
       hasPaginationRow = true;
     }
     if (currentPage < totalPages) {
-      keyboard.text('Oldinga ➡️', `sp_${searchId}_${type}_${currentPage + 1}`);
+      keyboard.text(t(lang, 'next'), `sp_${searchId}_${type}_${currentPage + 1}`);
       hasPaginationRow = true;
     }
     if (hasPaginationRow) {
@@ -353,13 +383,13 @@ async function renderSearch(
 
     // Row 2: Filters (All 3 in 1 single row with 🔹 active indicator)
     keyboard
-      .text(type === 'song' ? '🔹 Qo\'shiqlar' : 'Qo\'shiqlar', `sp_${searchId}_song_1`)
-      .text(type === 'album' ? '🔹 Albomlar' : 'Albomlar', `sp_${searchId}_album_1`)
-      .text(type === 'artist' ? '🔹 Xonandalar' : 'Xonandalar', `sp_${searchId}_artist_1`)
+      .text(type === 'song' ? `🔹 ${t(lang, 'songs')}` : t(lang, 'songs'), `sp_${searchId}_song_1`)
+      .text(type === 'album' ? `🔹 ${t(lang, 'albums')}` : t(lang, 'albums'), `sp_${searchId}_album_1`)
+      .text(type === 'artist' ? `🔹 ${t(lang, 'artists')}` : t(lang, 'artists'), `sp_${searchId}_artist_1`)
       .row();
 
     // Row 3: Close (Very bottom row)
-    keyboard.text('Yopish', 'close_msg').row();
+    keyboard.text(t(lang, 'close'), 'close_msg').row();
 
     if (messageId) {
       await ctx.api.editMessageText(ctx.chat.id, messageId, msgText, {
@@ -374,7 +404,8 @@ async function renderSearch(
     }
   } catch (err) {
     console.error('Search rendering error:', err);
-    const errMsg = '❌ *Qidiruvda xatolik yuz berdi\\. Keyinroq qaytadan urinib ko\'ring\\.*';
+    const lang = getUserLanguage(ctx);
+    const errMsg = `❌ *${t(lang, 'downloadErr')}*`;
     if (messageId) {
       await ctx.api.editMessageText(ctx.chat.id, messageId, errMsg, { parse_mode: 'MarkdownV2' });
     } else {
@@ -385,27 +416,28 @@ async function renderSearch(
 
 // ── /start ────────────────────────────────────────────────────────────────────
 bot.command('start', async (ctx) => {
-  const welcomeText =
-    `🎧 *JioSaavn Music Downloader Bot*\\!\n\n` +
-    `Menga qo'shiq nomini yozing yoki JioSaavn havolasini yuboring\\.\n\n` +
-    `*Buyruqlar:*\n` +
-    `• /quality — musiqa sifatini sozlash\n\n` +
-    `*Misollar:*\n` +
-    `• \`Blinding Lights\`\n` +
-    `• \`Tum Hi Ho\`\n` +
-    `• \`https://www.jiosaavn.com/song/blinding-lights/Fj9GfAxDWUY\``;
+  const lang = getUserLanguage(ctx);
+  await ctx.reply(t(lang, 'welcome'), { parse_mode: 'MarkdownV2' });
+});
 
-  await ctx.reply(welcomeText, { parse_mode: 'MarkdownV2' });
+// ── /language ─────────────────────────────────────────────────────────────────
+bot.command(['language', 'lang'], async (ctx) => {
+  const lang = getUserLanguage(ctx);
+  await ctx.reply(t(lang, 'langTitle'), {
+    parse_mode: 'MarkdownV2',
+    reply_markup: buildLanguageKeyboard(lang),
+  });
 });
 
 // ── /quality ──────────────────────────────────────────────────────────────────
 bot.command('quality', async (ctx) => {
   const userId = ctx.from?.id ?? 0;
+  const lang = getUserLanguage(ctx);
   const current = getUserQuality(userId);
 
   await ctx.reply(
-    `🎚 *Musiqa sifatini tanlang*\n\nHozirgi sifat: *${escapeMd(QUALITY_LABELS[current])}*`,
-    { parse_mode: 'MarkdownV2', reply_markup: buildQualityKeyboard(current) }
+    `${t(lang, 'qualityTitle')} *${escapeMd(QUALITY_LABELS[current])}*`,
+    { parse_mode: 'MarkdownV2', reply_markup: buildQualityKeyboard(current, lang) }
   );
 });
 
@@ -420,16 +452,31 @@ bot.on('callback_query:data', async (ctx) => {
     return;
   }
 
+  // ── Language selection ────────────────────────────────────────────────────
+  if (data.startsWith('setlang_')) {
+    const selected = data.replace('setlang_', '') as Language;
+    if (['uz', 'ru', 'en'].includes(selected)) {
+      userLanguage.set(userId, selected);
+      await ctx.editMessageText(t(selected, 'langSaved'), {
+        parse_mode: 'MarkdownV2',
+        reply_markup: buildLanguageKeyboard(selected),
+      });
+      await ctx.answerCallbackQuery();
+    }
+    return;
+  }
+
   // ── Search Pagination & Filter ───────────────────────────────────────────
   if (data.startsWith('sp_')) {
     const parts = data.split('_');
     const searchId = parts[1];
     const type = parts[2] as SearchType;
     const page = parseInt(parts[3], 10);
+    const lang = getUserLanguage(ctx);
     
     const query = searchCache.get(searchId);
     if (!query) {
-      await ctx.answerCallbackQuery({ text: '⚠️ Qidiruv eskirgan. Qayta qidiring.' });
+      await ctx.answerCallbackQuery({ text: t(lang, 'searchExpired') });
       return;
     }
     
@@ -442,33 +489,35 @@ bot.on('callback_query:data', async (ctx) => {
   // ── Quality selection ────────────────────────────────────────────────────
   if (data.startsWith('setq_')) {
     const selected = data.replace('setq_', '') as Quality;
+    const lang = getUserLanguage(ctx);
 
     if (!['96', '160', '320'].includes(selected)) {
-      await ctx.answerCallbackQuery({ text: '❌ Noto\'g\'ri sifat.' });
+      await ctx.answerCallbackQuery({ text: t(lang, 'invalidQuality') });
       return;
     }
 
     userQuality.set(userId, selected);
 
     await ctx.editMessageText(
-      `🎚 *Musiqa sifati saqlandi\\!*\n\nHozirgi sifat: *${escapeMd(QUALITY_LABELS[selected])}*`,
-      { parse_mode: 'MarkdownV2', reply_markup: buildQualityKeyboard(selected) }
+      `${t(lang, 'qualitySaved')}\n\nHozirgi sifat: *${escapeMd(QUALITY_LABELS[selected])}*`,
+      { parse_mode: 'MarkdownV2', reply_markup: buildQualityKeyboard(selected, lang) }
     );
-    await ctx.answerCallbackQuery({ text: `✅ ${selected} kbps tanlandi!` });
+    await ctx.answerCallbackQuery({ text: `✅ ${selected} kbps ${t(lang, 'qualitySelected')}` });
     return;
   }
 
   // ── Album Fetch ──────────────────────────────────────────────────────────
   if (data.startsWith('al_')) {
+    const lang = getUserLanguage(ctx);
     const token = data.replace('al_', '');
-    await ctx.editMessageText('⏳ *Albom yuklanmoqda…*', { parse_mode: 'MarkdownV2' }).catch(() => {});
+    await ctx.editMessageText(t(lang, 'albumLoading'), { parse_mode: 'MarkdownV2' }).catch(() => {});
     await ctx.answerCallbackQuery().catch(() => {});
     
     try {
       const resp = await axios.get(`${BASE_API}/album?token=${token}`);
       const album = resp.data;
       if (!album || !album.songs || album.songs.length === 0) {
-        await ctx.editMessageText('⚠️ *Ushbu albom musiqalari JioSaavn manbasida topilmadi\\.*', { parse_mode: 'MarkdownV2' }).catch(() => {});
+        await ctx.editMessageText(t(lang, 'noAlbumFound'), { parse_mode: 'MarkdownV2' }).catch(() => {});
         return;
       }
       
@@ -483,57 +532,59 @@ bot.on('callback_query:data', async (ctx) => {
         keyboard.text(`${index + 1}. ${title.slice(0, 48)}`, `dl_${cacheId}`).row();
       });
       
-      keyboard.text('📥 Hammasini yuklab olish', `dla_${token}`).row();
-      keyboard.text('Yopish', 'close_msg').row();
+      keyboard.text(t(lang, 'downloadAll'), `dla_${token}`).row();
+      keyboard.text(t(lang, 'close'), 'close_msg').row();
       
       await ctx.editMessageText(msgText, { parse_mode: 'MarkdownV2', reply_markup: keyboard }).catch(() => {});
     } catch (err) {
       console.error('Album fetch error:', err);
-      await ctx.editMessageText('❌ *Albomni yuklab bo\'lmadi\\.*', { parse_mode: 'MarkdownV2' }).catch(() => {});
+      await ctx.editMessageText(t(lang, 'noAlbumFound'), { parse_mode: 'MarkdownV2' }).catch(() => {});
     }
     return;
   }
 
   // ── Artist Fetch ─────────────────────────────────────────────────────────
   if (data.startsWith('ar_')) {
+    const lang = getUserLanguage(ctx);
     const token = data.replace('ar_', '');
-    await ctx.editMessageText(`⏳ *Xonanda ma'lumotlari yuklanmoqda…*`, { parse_mode: 'MarkdownV2' }).catch(() => {});
+    await ctx.editMessageText(t(lang, 'artistLoading'), { parse_mode: 'MarkdownV2' }).catch(() => {});
     await ctx.answerCallbackQuery().catch(() => {});
     
     try {
       const resp = await axios.get(`${BASE_API}/artist?token=${token}`);
       const artist = resp.data;
       if (!artist || !artist.name) {
-        await ctx.editMessageText(`⚠️ *Xonanda ma'lumotlari topilmadi\\.*`, { parse_mode: 'MarkdownV2' }).catch(() => {});
+        await ctx.editMessageText(t(lang, 'noArtistFound'), { parse_mode: 'MarkdownV2' }).catch(() => {});
         return;
       }
       
       const keyboard = new InlineKeyboard();
-      const msgText = `👤 *${escapeMd(artist.name)}*\n\nMa'lumotlarni tanlang:`;
+      const msgText = `👤 *${escapeMd(artist.name)}*\n\n${t(lang, 'selectOption')}`;
       
-      keyboard.text('TOP 10', `artop_${token}`).row();
-      keyboard.text('Albomlar', `aralb_${token}`).row();
-      keyboard.text('Yopish', 'close_msg').row();
+      keyboard.text(t(lang, 'top10'), `artop_${token}`).row();
+      keyboard.text(t(lang, 'albums'), `aralb_${token}`).row();
+      keyboard.text(t(lang, 'close'), 'close_msg').row();
       
       await ctx.editMessageText(msgText, { parse_mode: 'MarkdownV2', reply_markup: keyboard }).catch(() => {});
     } catch (err) {
       console.error('Artist fetch error:', err);
-      await ctx.editMessageText(`❌ *Xonanda ma'lumotlarini yuklab bo'lmadi\\.*`, { parse_mode: 'MarkdownV2' }).catch(() => {});
+      await ctx.editMessageText(t(lang, 'noArtistFound'), { parse_mode: 'MarkdownV2' }).catch(() => {});
     }
     return;
   }
 
   // ── Artist TOP 10 Fetch ──────────────────────────────────────────────────
   if (data.startsWith('artop_')) {
+    const lang = getUserLanguage(ctx);
     const token = data.replace('artop_', '');
-    await ctx.editMessageText(`⏳ *Top 10 qo'shiqlar yuklanmoqda…*`, { parse_mode: 'MarkdownV2' }).catch(() => {});
+    await ctx.editMessageText(t(lang, 'topSongsLoading'), { parse_mode: 'MarkdownV2' }).catch(() => {});
     await ctx.answerCallbackQuery().catch(() => {});
     
     try {
       const resp = await axios.get(`${BASE_API}/artist?token=${token}`);
       const artist = resp.data;
       if (!artist || !artist.topSongs || artist.topSongs.length === 0) {
-        await ctx.editMessageText('⚠️ *Ushbu xonanda musiqalari JioSaavn manbasida topilmadi\\.*', { parse_mode: 'MarkdownV2' }).catch(() => {});
+        await ctx.editMessageText(t(lang, 'noSongsFound'), { parse_mode: 'MarkdownV2' }).catch(() => {});
         return;
       }
       
@@ -549,19 +600,20 @@ bot.on('callback_query:data', async (ctx) => {
         keyboard.text(`${index + 1}. ${title.slice(0, 48)}`, `dl_${cacheId}`).row();
       });
       
-      keyboard.text('⬅️ Orqaga', `ar_${token}`).row();
-      keyboard.text('Yopish', 'close_msg').row();
+      keyboard.text(t(lang, 'prev'), `ar_${token}`).row();
+      keyboard.text(t(lang, 'close'), 'close_msg').row();
       
       await ctx.editMessageText(msgText, { parse_mode: 'MarkdownV2', reply_markup: keyboard }).catch(() => {});
     } catch (err) {
       console.error('Artist Top 10 fetch error:', err);
-      await ctx.editMessageText(`❌ *Qo'shiqlarni yuklab bo'lmadi\\.*`, { parse_mode: 'MarkdownV2' }).catch(() => {});
+      await ctx.editMessageText(t(lang, 'noSongsFound'), { parse_mode: 'MarkdownV2' }).catch(() => {});
     }
     return;
   }
 
   // ── Artist Albums Fetch ──────────────────────────────────────────────────
   if (data.startsWith('aralb_')) {
+    const lang = getUserLanguage(ctx);
     const payload = data.replace('aralb_', '');
     let page = 1;
     let token = payload;
@@ -575,7 +627,7 @@ bot.on('callback_query:data', async (ctx) => {
       }
     }
 
-    await ctx.editMessageText(`⏳ *Albomlar yuklanmoqda…*`, { parse_mode: 'MarkdownV2' }).catch(() => {});
+    await ctx.editMessageText(t(lang, 'albumsLoading'), { parse_mode: 'MarkdownV2' }).catch(() => {});
     await ctx.answerCallbackQuery().catch(() => {});
     
     try {
@@ -591,7 +643,7 @@ bot.on('callback_query:data', async (ctx) => {
       const uniqueAlbums = dedupeByKeys(allAlbums);
       
       if (!uniqueAlbums || uniqueAlbums.length === 0) {
-        await ctx.editMessageText(`⚠️ *Ushbu xonanda uchun albomlar topilmadi\\.*`, { parse_mode: 'MarkdownV2' }).catch(() => {});
+        await ctx.editMessageText(t(lang, 'noAlbumsFound'), { parse_mode: 'MarkdownV2' }).catch(() => {});
         return;
       }
 
@@ -604,7 +656,7 @@ bot.on('callback_query:data', async (ctx) => {
       const pageAlbums = uniqueAlbums.slice(startIndex, startIndex + pageSize);
       
       const keyboard = new InlineKeyboard();
-      let msgText = `👤 *${escapeMd(artist.name)}* — 💿 *Albom va Singllari* \\(${currentPage}/${totalPages}\\-sahifa\\):\n\n`;
+      let msgText = `👤 *${escapeMd(artist.name)}* — 💿 *${t(lang, 'albumAndSingles')}* \\(${currentPage}/${totalPages}\\-${t(lang, 'page')}\\):\n\n`;
       
       pageAlbums.forEach((album: any, index: number) => {
         const title = album.title || 'Album';
@@ -615,25 +667,25 @@ bot.on('callback_query:data', async (ctx) => {
       // Pagination controls
       let hasPaginationRow = false;
       if (currentPage > 1) {
-        keyboard.text('⬅️ Orqaga', `aralb_${currentPage - 1}_${token}`);
+        keyboard.text(t(lang, 'prev'), `aralb_${currentPage - 1}_${token}`);
         hasPaginationRow = true;
       }
       if (currentPage < totalPages) {
-        keyboard.text('Oldinga ➡️', `aralb_${currentPage + 1}_${token}`);
+        keyboard.text(t(lang, 'next'), `aralb_${currentPage + 1}_${token}`);
         hasPaginationRow = true;
       }
       if (hasPaginationRow) {
         keyboard.row();
       }
 
-      // Back to Artist Profile
-      keyboard.text('🔙 Xonanda sahifasiga', `ar_${token}`).row();
-      keyboard.text('Yopish', 'close_msg').row();
+      // Back to Artist Profile & Close
+      keyboard.text(t(lang, 'backToArtist'), `ar_${token}`).row();
+      keyboard.text(t(lang, 'close'), 'close_msg').row();
       
       await ctx.editMessageText(msgText, { parse_mode: 'MarkdownV2', reply_markup: keyboard }).catch(() => {});
     } catch (err) {
       console.error('Artist Albums fetch error:', err);
-      await ctx.editMessageText(`❌ *Albomlarni yuklab bo'lmadi\\.*`, { parse_mode: 'MarkdownV2' }).catch(() => {});
+      await ctx.editMessageText(t(lang, 'noAlbumsFound'), { parse_mode: 'MarkdownV2' }).catch(() => {});
     }
     return;
   }
