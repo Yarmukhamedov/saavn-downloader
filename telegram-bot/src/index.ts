@@ -519,14 +519,13 @@ bot.on('callback_query:data', async (ctx) => {
   if (data.startsWith('al_')) {
     const lang = getUserLanguage(ctx);
     const token = data.replace('al_', '');
-    await ctx.editMessageText(t(lang, 'albumLoading'), { parse_mode: 'MarkdownV2' }).catch(() => {});
     await ctx.answerCallbackQuery().catch(() => {});
     
     try {
       const resp = await axios.get(`${BASE_API}/album?token=${token}`);
       const album = resp.data;
       if (!album || !album.songs || album.songs.length === 0) {
-        await ctx.editMessageText(t(lang, 'noAlbumFound'), { parse_mode: 'MarkdownV2' }).catch(() => {});
+        await editOrReplaceText(ctx, t(lang, 'noAlbumFound'), { parse_mode: 'MarkdownV2' });
         return;
       }
       
@@ -544,10 +543,27 @@ bot.on('callback_query:data', async (ctx) => {
       keyboard.text(t(lang, 'downloadAll'), `dla_${token}`).row();
       keyboard.text(t(lang, 'close'), 'close_msg').row();
       
-      await ctx.editMessageText(msgText, { parse_mode: 'MarkdownV2', reply_markup: keyboard }).catch(() => {});
+      const imgUrl = typeof album.image === 'string' && album.image.startsWith('http')
+        ? album.image.replace(/150x150|50x50/, '500x500')
+        : undefined;
+
+      await ctx.deleteMessage().catch(() => {});
+
+      if (imgUrl) {
+        await ctx.replyWithPhoto(imgUrl, {
+          caption: msgText,
+          parse_mode: 'MarkdownV2',
+          reply_markup: keyboard
+        });
+      } else {
+        await ctx.reply(msgText, {
+          parse_mode: 'MarkdownV2',
+          reply_markup: keyboard
+        });
+      }
     } catch (err) {
       console.error('Album fetch error:', err);
-      await ctx.editMessageText(t(lang, 'noAlbumFound'), { parse_mode: 'MarkdownV2' }).catch(() => {});
+      await editOrReplaceText(ctx, t(lang, 'noAlbumFound'), { parse_mode: 'MarkdownV2' });
     }
     return;
   }
