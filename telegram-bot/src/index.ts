@@ -124,6 +124,51 @@ function buildQualityKeyboard(current: Quality, lang: Language = 'uz'): InlineKe
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+function isItemByArtist(item: any, targetArtist: any): boolean {
+  if (!item || !targetArtist) return false;
+
+  const targetId = String(targetArtist.id || targetArtist.artistId || '').toLowerCase();
+  const targetName = (targetArtist.name || '').trim().toLowerCase();
+  if (!targetName && !targetId) return false;
+
+  const targetVariants = [
+    targetName,
+    targetName.replace(/o/g, 'a'),
+    targetName.replace(/a/g, 'o')
+  ];
+
+  // 1. Check artist objects array if available
+  const artistList = [
+    ...(item.artists?.primary || []),
+    ...(item.artists?.featured || []),
+    ...(item.artists?.all || []),
+    ...(item.more_info?.artists?.primary || []),
+    ...(item.more_info?.artists?.featured || []),
+    ...(item.more_info?.artists?.all || []),
+  ];
+
+  for (const a of artistList) {
+    if (targetId && a.id && String(a.id).toLowerCase() === targetId) return true;
+    const aName = (a.name || '').trim().toLowerCase();
+    if (aName && targetVariants.includes(aName)) return true;
+  }
+
+  // 2. Parse subtitle or primary_artists string (split by , & ; feat ft and)
+  const rawArtists = item.primary_artists || item.subtitle || item.more_info?.artistMap?.primary_artists?.map((a: any) => a.name).join(', ') || '';
+  if (rawArtists) {
+    const names = rawArtists
+      .split(/[,;&]|\bfeat\.?\b|\bft\.?\b|\band\b/i)
+      .map((s: string) => s.trim().toLowerCase())
+      .filter(Boolean);
+
+    for (const n of names) {
+      if (targetVariants.includes(n)) return true;
+    }
+  }
+
+  return false;
+}
+
 async function editOrReplaceText(ctx: any, text: string, options: any) {
   try {
     await ctx.editMessageText(text, options);
@@ -636,7 +681,7 @@ bot.on('callback_query:data', async (ctx) => {
       let searchSongs: any[] = [];
       const searchResp = await axios.get(`${BASE_API}/songs?q=${encodeURIComponent(artist.name)}&limit=50`).catch(() => null);
       if (searchResp && searchResp.data?.results) {
-        searchSongs = searchResp.data.results;
+        searchSongs = searchResp.data.results.filter((song: any) => isItemByArtist(song, artist));
       }
 
       const combinedSongs = [
@@ -699,7 +744,7 @@ bot.on('callback_query:data', async (ctx) => {
       if (artist && artist.name) {
         const searchResp = await axios.get(`${BASE_API}/albums?q=${encodeURIComponent(artist.name)}&limit=50`).catch(() => null);
         if (searchResp && searchResp.data?.results) {
-          searchAlbums = searchResp.data.results;
+          searchAlbums = searchResp.data.results.filter((album: any) => isItemByArtist(album, artist));
         }
       }
       
