@@ -81,10 +81,11 @@ function getUserLanguage(ctx: any): Language {
   if (userLanguage.has(userId)) {
     return userLanguage.get(userId)!;
   }
-  const code = ctx.from?.language_code || '';
+  const code = (ctx.from?.language_code || '').toLowerCase();
   if (code.startsWith('uz')) return 'uz';
   if (code.startsWith('ru')) return 'ru';
-  return 'en';
+  if (code.startsWith('en')) return 'en';
+  return 'en'; // Default fallback for any unsupported language
 }
 
 function buildLanguageKeyboard(current: Language): InlineKeyboard {
