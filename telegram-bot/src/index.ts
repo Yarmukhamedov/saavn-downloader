@@ -84,17 +84,27 @@ function getUserLanguage(ctx: any): Language {
   const code = (ctx.from?.language_code || '').toLowerCase();
   if (code.startsWith('uz')) return 'uz';
   if (code.startsWith('ru')) return 'ru';
+  if (code.startsWith('hi')) return 'hi';
+  if (code.startsWith('tr')) return 'tr';
+  if (code.startsWith('es')) return 'es';
+  if (code.startsWith('fr')) return 'fr';
+  if (code.startsWith('de')) return 'de';
+  if (code.startsWith('ar')) return 'ar';
   if (code.startsWith('en')) return 'en';
-  return 'en'; // Default fallback for any unsupported language
+  return 'en';
 }
 
 function buildLanguageKeyboard(current: Language): InlineKeyboard {
   const keyboard = new InlineKeyboard();
-  const langs: Language[] = ['uz', 'ru', 'en'];
-  langs.forEach((lang) => {
-    const check = current === lang ? '🔹 ' : '';
-    keyboard.text(`${check}${LANG_NAMES[lang]}`, `setlang_${lang}`).row();
-  });
+  const langs: Language[] = ['uz', 'ru', 'en', 'hi', 'tr', 'es', 'fr', 'de', 'ar'];
+  for (let i = 0; i < langs.length; i += 3) {
+    const rowLangs = langs.slice(i, i + 3);
+    rowLangs.forEach((lang) => {
+      const check = current === lang ? '🔹 ' : '';
+      keyboard.text(`${check}${LANG_NAMES[lang]}`, `setlang_${lang}`);
+    });
+    keyboard.row();
+  }
   keyboard.text(t(current, 'close'), 'close_msg').row();
   return keyboard;
 }
@@ -610,7 +620,7 @@ bot.on('callback_query:data', async (ctx) => {
   // ── Language selection ────────────────────────────────────────────────────
   if (data.startsWith('setlang_')) {
     const selected = data.replace('setlang_', '') as Language;
-    if (['uz', 'ru', 'en'].includes(selected)) {
+    if (['uz', 'ru', 'en', 'hi', 'tr', 'es', 'fr', 'de', 'ar'].includes(selected)) {
       userLanguage.set(userId, selected);
       await ctx.editMessageText(t(selected, 'langSaved'), {
         parse_mode: 'MarkdownV2',
