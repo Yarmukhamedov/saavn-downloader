@@ -1040,7 +1040,10 @@ bot.on('message:text', async (ctx) => {
 
   // ── JioSaavn Direct Link Handler ───────────────────────────────────────────
   if (text.includes('jiosaavn.com/song/')) {
-    const statusMsg = await ctx.reply('⏳ *Musiqa tayyorlanmoqda, kuting…*', { parse_mode: 'MarkdownV2' });
+    const statusMsg = await ctx.reply('⏳ *Musiqa tayyorlanmoqda, kuting…*', {
+      parse_mode: 'MarkdownV2',
+      reply_parameters: ctx.message?.message_id ? { message_id: ctx.message.message_id } : undefined,
+    });
 
     try {
       let permaUrl = '';
@@ -1069,7 +1072,10 @@ bot.on('message:text', async (ctx) => {
   }
 
   // ── Text Search ──────────────────────────────────────────────────────────
-  const statusMsg = await ctx.reply('🔍 *Qidirilmoqda…*', { parse_mode: 'MarkdownV2' });
+  const statusMsg = await ctx.reply('🔍 *Qidirilmoqda…*', {
+    parse_mode: 'MarkdownV2',
+    reply_parameters: ctx.message?.message_id ? { message_id: ctx.message.message_id } : undefined,
+  });
   const userId = ctx.from?.id ?? 0;
   const quality = getUserQuality(userId);
   await renderSearch(ctx, text, 'song', 1, quality, statusMsg.message_id);
