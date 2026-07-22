@@ -617,123 +617,96 @@ bot.on('message:text', async (ctx) => {
   const text = ctx.message.text.trim();
 
   // ── JioSaavn direct URL ────────────────────────────────────────────────
-  if (text.includes('jiosaavn.com/song/')) {
-    const statusMsg = await ctx.reply('⏳ *Musiqa ma\'lumotlari olinmoqda…*', { parse_mode: 'MarkdownV2' });
+  // ── Direct Link Handler (Spotify, Apple Music, JioSaavn) ───────────────────
+  if (text.includes('spotify.com') || text.includes('apple.com') || text.includes('jiosaavn.com/song/')) {
+    const statusMsg = await ctx.reply('⏳ *Musiqa tayyorlanmoqda, kuting…*', { parse_mode: 'MarkdownV2' });
 
     try {
-      const resp = await axios.get(`${SONG_API}?url=${encodeURIComponent(text)}`);
-      const song = resp.data;
+      let permaUrl = '';
 
-      if (!song?.id) {
-        await ctx.api.editMessageText(ctx.chat.id, statusMsg.message_id, '❌ *Musiqa topilmadi\\.*', { parse_mode: 'MarkdownV2' });
-        return;
-      }
-
-      const cacheId = cacheSong(song.perma_url);
-      const keyboard = new InlineKeyboard().text('⬇️ Musiqani yuklab olish', `dl_${cacheId}`);
-
-      const title = escapeMd(song.title);
-      const artists = escapeMd(
-        song.more_info?.artists?.primary?.map((a: any) => a.name).join(', ') || song.subtitle
-      );
-      const album = escapeMd(song.more_info?.album || '');
-      const duration = formatDuration(song.more_info?.duration);
-      const userId = ctx.from?.id ?? 0;
-      const quality = getUserQuality(userId);
-
-      const caption =
-        `🎵 *${title}*\n` +
-        `👤 *Xonanda:* ${artists}\n` +
-        `💿 *Albom:* ${album}\n` +
-        `⏱ *Davomiyligi:* ${duration}\n` +
-        `🔊 *Sifat:* ${quality} kbps`;
-
-      if (song.image) {
-        await ctx.replyWithPhoto(song.image.replace(/150x150|50x50/, '500x500'), {
-          caption,
-          parse_mode: 'MarkdownV2',
-          reply_markup: keyboard,
-        });
-        await ctx.api.deleteMessage(ctx.chat.id, statusMsg.message_id).catch(() => {});
-      } else {
-        await ctx.api.editMessageText(ctx.chat.id, statusMsg.message_id, caption, {
-          parse_mode: 'MarkdownV2',
-          reply_markup: keyboard,
-        });
-      }
-    } catch (err) {
-      console.error('URL fetch error:', err);
-      await ctx.api.editMessageText(
-        ctx.chat.id,
-        statusMsg.message_id,
-        '❌ *Musiqani olishda xatolik yuz berdi\\.*',
-        { parse_mode: 'MarkdownV2' }
-      );
-    }
-    return;
-  }
-
-  // ── Smart Search & Links ──────────────────────────────────────────────────
-  let query = text;
-  const statusMsg = await ctx.reply('🔍 *Qidirilmoqda…*', { parse_mode: 'MarkdownV2' });
-
-  if (text.includes('spotify.com') || text.includes('apple.com')) {
-    try {
-      let fetchUrl = text;
-      const spotifyMatch = text.match(/track\/([a-zA-Z0-9]+)/);
-      if (spotifyMatch) {
-        fetchUrl = `https://open.spotify.com/embed/track/${spotifyMatch[1]}`;
-      } else if (text.includes('music.apple.com')) {
-        fetchUrl = text.replace('music.apple.com', 'embed.music.apple.com');
-      }
-
-      const res = await axios.get(fetchUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept-Language': 'en-US,en;q=0.9'
+      if (text.includes('jiosaavn.com/song/')) {
+        const resp = await axios.get(`${SONG_API}?url=${encodeURIComponent(text)}`);
+        if (resp.data?.perma_url) {
+          permaUrl = resp.data.perma_url;
         }
-      });
-      const html = res.data || '';
-
-      let rawTitle = '';
-      const ogTitleMatch = html.match(/<meta[^>]*property=["'](?:og|twitter):title["'][^>]*content=["'](.*?)["']/i) ||
-                           html.match(/<meta[^>]*content=["'](.*?)["'][^>]*property=["'](?:og|twitter):title["']/i);
-      if (ogTitleMatch && ogTitleMatch[1]) {
-        rawTitle = ogTitleMatch[1];
       } else {
-        const match = html.match(/<title>(.*?)<\/title>/i);
-        if (match && match[1]) rawTitle = match[1];
-      }
+        let fetchUrl = text;
+        const spotifyMatch = text.match(/track\/([a-zA-Z0-9]+)/);
+        if (spotifyMatch) {
+          fetchUrl = `https://open.spotify.com/embed/track/${spotifyMatch[1]}`;
+        } else if (text.includes('music.apple.com')) {
+          fetchUrl = text.replace('music.apple.com', 'embed.music.apple.com');
+        }
 
-      if (rawTitle && !rawTitle.toLowerCase().includes('spotify - home')) {
-        let clean = rawTitle
-          .replace(/\| Spotify/gi, '')
-          .replace(/on Apple Music/gi, '')
-          .replace(/- song and lyrics by.*/gi, '')
-          .replace(/- song by.*/gi, '')
-          .trim();
+        const res = await axios.get(fetchUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept-Language': 'en-US,en;q=0.9'
+          }
+        });
+        const html = res.data || '';
+
+        let songTitle = '';
+        let songArtist = '';
+
+        const ogTitleMatch = html.match(/<meta[^>]*property=["'](?:og|twitter):title["'][^>]*content=["'](.*?)["']/i) ||
+                             html.match(/<meta[^>]*content=["'](.*?)["'][^>]*property=["'](?:og|twitter):title["']/i);
+        if (ogTitleMatch && ogTitleMatch[1]) {
+          songTitle = ogTitleMatch[1];
+        } else {
+          const match = html.match(/<title>(.*?)<\/title>/i);
+          if (match && match[1]) songTitle = match[1];
+        }
 
         const ogDescMatch = html.match(/<meta[^>]*property=["'](?:og|twitter):description["'][^>]*content=["'](.*?)["']/i) ||
                             html.match(/<meta[^>]*content=["'](.*?)["'][^>]*property=["'](?:og|twitter):description["']/i);
         if (ogDescMatch && ogDescMatch[1]) {
           const parts = ogDescMatch[1].split('·').map((p: string) => p.trim());
           if (parts.length >= 2) {
-            const artist = parts[0].replace(/^Listen to .*? on Spotify\.\s*/i, '').trim();
-            if (artist && !clean.toLowerCase().includes(artist.toLowerCase())) {
-              clean = `${artist} ${clean}`;
-            }
+            songArtist = parts[0].replace(/^Listen to .*? on Spotify\.\s*/i, '').trim();
           }
         }
-        if (clean) query = clean;
+
+        songTitle = songTitle
+          .replace(/\| Spotify/gi, '')
+          .replace(/on Apple Music/gi, '')
+          .replace(/- song and lyrics by.*/gi, '')
+          .replace(/- song by.*/gi, '')
+          .trim();
+
+        if (songTitle && !songTitle.toLowerCase().includes('spotify - home')) {
+          const searchQuery = songArtist ? `${songArtist} ${songTitle}` : songTitle;
+          const searchResp = await axios.get(`${BASE_API}/songs?q=${encodeURIComponent(searchQuery)}&limit=1`);
+          if (searchResp.data?.results?.length > 0) {
+            permaUrl = searchResp.data.results[0].perma_url;
+          }
+        }
       }
-    } catch (e) {
-      console.error('Link parse error:', e);
+
+      if (permaUrl) {
+        const userId = ctx.from?.id ?? 0;
+        const quality = getUserQuality(userId);
+        const ok = await downloadAndSendAudio(ctx, permaUrl, quality);
+        if (ok) {
+          await ctx.api.deleteMessage(ctx.chat.id, statusMsg.message_id).catch(() => {});
+          return;
+        }
+      }
+
+      await ctx.api.editMessageText(ctx.chat.id, statusMsg.message_id, '❌ *Musiqa topilmadi yoki yuklab bo\'lmadi\\.*', { parse_mode: 'MarkdownV2' });
+      return;
+    } catch (err) {
+      console.error('Direct link error:', err);
+      await ctx.api.editMessageText(ctx.chat.id, statusMsg.message_id, '❌ *Musiqani yuklashda xatolik yuz berdi\\.*', { parse_mode: 'MarkdownV2' });
+      return;
     }
   }
 
+  // ── Text Search ──────────────────────────────────────────────────────────
+  const statusMsg = await ctx.reply('🔍 *Qidirilmoqda…*', { parse_mode: 'MarkdownV2' });
   const userId = ctx.from?.id ?? 0;
   const quality = getUserQuality(userId);
-  await renderSearch(ctx, query, 'song', 1, quality, statusMsg.message_id);
+  await renderSearch(ctx, text, 'song', 1, quality, statusMsg.message_id);
 });
 
 // ── Global error handler (prevents crash loops) ───────────────────────────────
