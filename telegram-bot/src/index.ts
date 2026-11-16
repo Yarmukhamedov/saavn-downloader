@@ -1098,6 +1098,20 @@ bot.catch((err) => {
   console.error(`Error while handling update ${ctx.update.update_id}:`, err.error);
 });
 
+// ── Optional HTTP health check (for Railway / cloud platforms) ─────────────────
+const PORT = process.env.PORT;
+if (PORT) {
+  import('http').then(({ createServer }) => {
+    const server = createServer((_req, res) => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ status: 'ok', bot: 'JioSaavn Downloader' }));
+    });
+    server.listen(Number(PORT), () => {
+      console.log(`🌐 Health check server listening on port ${PORT}`);
+    });
+  }).catch((err) => console.error('Failed to start healthcheck server:', err));
+}
+
 // ── Launch ────────────────────────────────────────────────────────────────────
 bot.start();
 console.log('🤖 JioSaavn Telegram Bot is running...');
