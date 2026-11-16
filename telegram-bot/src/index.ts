@@ -13,7 +13,11 @@ dotenv.config();
 
 const execFilePromise = util.promisify(execFile);
 
-const BOT_TOKEN = process.env.BOT_TOKEN || '8922942398:AAFsRjiocyDI7sCXDsfszkJvvzUrCzygeO4';
+const BOT_TOKEN = process.env.BOT_TOKEN;
+if (!BOT_TOKEN) {
+  console.error('❌ FATAL: BOT_TOKEN environment variable is required!');
+  process.exit(1);
+}
 const SEARCH_API = process.env.SEARCH_API || 'https://jiosaavn-api-eight-sigma.vercel.app/api/songs?q=';
 const BASE_API = SEARCH_API.replace('/songs?q=', ''); // typically https://jiosaavn-api-eight-sigma.vercel.app/api
 const SONG_API = process.env.SONG_API || 'https://sda.ymkhdv.workers.dev/song';
